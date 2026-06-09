@@ -106,3 +106,7 @@
 - [x] Tela de onboarding com cadastro inicial da família
 - [x] Memória de longo prazo por perfil (preferências, histórico, rotina)
 - [x] Alaju usa memória nas respostas personalizadas
+
+## Correção de Crash (APK Android)
+- [x] Instalar expo-speech-recognition como dependência nativa (versão 3.1.3 compatível com SDK 54)
+- [x] Corrigir plugin do expo-speech-recognition no app.config.ts
