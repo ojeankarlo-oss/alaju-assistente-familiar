@@ -121,7 +121,7 @@ export default function HomeScreen() {
   const speakResponse = useCallback(
     (text: string) => {
       if (!voiceEnabled || Platform.OS === "web") return;
-      Speech.stop();
+      Speech.stop().catch(() => {});
       Speech.speak(text, {
         language: "pt-BR",
         rate: 0.95,

@@ -134,7 +134,7 @@ export function useVoiceAssistant(onTranscript?: (text: string) => void) {
       onDone?.();
       return;
     }
-    Speech.stop();
+    Speech.stop().catch(() => {});
     setVoiceState("speaking");
     Speech.speak(text, {
       language: "pt-BR",
@@ -221,7 +221,7 @@ export function useVoiceAssistant(onTranscript?: (text: string) => void) {
       if (isListeningRef.current) {
         ExpoSpeechRecognitionModule.stop();
       }
-      Speech.stop();
+      Speech.stop().catch(() => {});
     };
   }, []);
 

@@ -174,7 +174,7 @@ export default function AvatarChatScreen() {
   const speakResponse = useCallback(
     (text: string) => {
       if (!voiceEnabled || Platform.OS === "web") return;
-      Speech.stop();
+      Speech.stop().catch(() => {});
       setIsSpeaking(true);
       Speech.speak(text, {
         language: "pt-BR",
@@ -265,7 +265,7 @@ export default function AvatarChatScreen() {
         <Pressable
           style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
           onPress={() => {
-            Speech.stop();
+            Speech.stop().catch(() => {});
             router.back();
           }}
         >
@@ -276,7 +276,7 @@ export default function AvatarChatScreen() {
           style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
           onPress={() => {
             setVoiceEnabled(!voiceEnabled);
-            if (voiceEnabled) Speech.stop();
+            if (voiceEnabled) Speech.stop().catch(() => {});
           }}
         >
           <IconSymbol

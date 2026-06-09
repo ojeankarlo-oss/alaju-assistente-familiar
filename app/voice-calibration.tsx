@@ -348,7 +348,7 @@ export default function VoiceCalibrationScreen() {
         style={[styles.btnSecondary, { borderColor: colors.border, marginTop: 24 }]}
         onPress={() => {
           ExpoSpeechRecognitionModule.stop();
-          Speech.stop();
+          Speech.stop().catch(() => {});
           setStep("select");
           setCurrentPhraseIdx(0);
           setCapturedPhrases([]);
