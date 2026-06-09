@@ -15,7 +15,9 @@ import * as Haptics from "expo-haptics";
 import * as Speech from "expo-speech";
 import { router } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
+import { VoiceButton } from "@/components/voice-button";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { useVoiceAssistant } from "@/hooks/use-voice-assistant";
 import { useColors } from "@/hooks/use-colors";
 import {
   addChatMessage,
@@ -83,6 +85,16 @@ export default function HomeScreen() {
   const flatListRef = useRef<FlatList>(null);
 
   const chatMutation = trpc.assistant.chat.useMutation();
+
+  // Hook de assistente por voz — referência estável via ref
+  const sendMessageRef = useRef<(text: string) => void>(null as any);
+  const { voiceState, toggleListening } = useVoiceAssistant(
+    useCallback((transcript: string) => {
+      if (transcript.trim()) {
+        sendMessageRef.current?.(transcript.trim());
+      }
+    }, [])
+  );
 
   useEffect(() => {
     (async () => {
@@ -214,6 +226,11 @@ export default function HomeScreen() {
 
   const handleSend = useCallback(() => sendMessage(inputText), [sendMessage, inputText]);
 
+  // Conectar ref ao sendMessage para o hook de voz usar
+  useEffect(() => {
+    sendMessageRef.current = sendMessage;
+  }, [sendMessage]);
+
   const greeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return "Bom dia";
@@ -330,13 +347,17 @@ export default function HomeScreen() {
       <View style={[styles.inputArea, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
         {isLoading && (
           <View style={styles.typingIndicator}>
-            <Text style={[styles.typingText, { color: colors.muted }]}>Fami está digitando...</Text>
+            <Text style={[styles.typingText, { color: colors.muted }]}>Alaju está pensando...</Text>
           </View>
         )}
+        {/* Botão de voz centralizado acima do input */}
+        <View style={styles.voiceBtnRow}>
+          <VoiceButton voiceState={voiceState} onPress={toggleListening} size={56} />
+        </View>
         <View style={styles.inputRow}>
           <TextInput
             style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
-            placeholder="Fale com a Alaju..."
+            placeholder="Ou escreva aqui..."
             placeholderTextColor={colors.muted}
             value={inputText}
             onChangeText={setInputText}
@@ -489,6 +510,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 15,
     maxHeight: 100,
+  },
+  voiceBtnRow: {
+    alignItems: "center",
+    paddingVertical: 8,
   },
   sendBtn: {
     width: 44,

@@ -84,3 +84,11 @@
 - [x] Gerar novo ícone do app com identidade Alaju
 - [x] Criar tela de conversa com avatar ao acionar a voz
 - [x] Atualizar todas as referências de "Fami" para "Alaju" no código
+
+## Acionamento por Voz (Wake Word)
+- [x] Hook de gravação de voz com permissão de microfone
+- [x] Botão de microfone que grava e transcreve via backend
+- [x] Detecção de palavra-chave "Oi Alaju" na transcrição
+- [x] Resposta de voz automática ao ser acionada ("No que posso ajudar?")
+- [x] Indicador visual de escuta ativa (microfone pulsando)
+- [x] Fluxo completo: gravar → transcrever → responder por voz e texto
