@@ -77,3 +77,10 @@
 
 ## Testes
 - [x] Testes unitários do family-store (12 testes passando)
+
+## Renomeação e Avatar (Alaju)
+- [x] Renomear app de Fami para Alaju
+- [x] Gerar avatar da assistente (mulher negra, cabelos cacheados, olhos verdes)
+- [x] Gerar novo ícone do app com identidade Alaju
+- [x] Criar tela de conversa com avatar ao acionar a voz
+- [x] Atualizar todas as referências de "Fami" para "Alaju" no código

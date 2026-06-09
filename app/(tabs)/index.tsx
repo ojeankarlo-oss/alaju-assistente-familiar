@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
+  Image,
   Linking,
   Platform,
   Pressable,
@@ -42,9 +43,10 @@ function ChatBubble({ msg, memberName }: { msg: ChatMessage; memberName?: string
   return (
     <View style={[styles.bubbleRow, isUser ? styles.bubbleRowUser : styles.bubbleRowBot]}>
       {!isUser && (
-        <View style={[styles.botAvatar, { backgroundColor: "#1A3A5C" }]}>
-          <Text style={styles.botAvatarText}>F</Text>
-        </View>
+        <Image
+          source={{ uri: "https://d2xsxph8kpxj0f.cloudfront.net/310419663030092336/Dg9rCS6mqHJnEdKLTNr2hB/alaju-avatar-cmDpNksKLQqCob9bJ3No9k.png" }}
+          style={styles.botAvatar}
+        />
       )}
       <View
         style={[
@@ -55,7 +57,7 @@ function ChatBubble({ msg, memberName }: { msg: ChatMessage; memberName?: string
         ]}
       >
         {!isUser && (
-          <Text style={[styles.bubbleName, { color: "#1A3A5C" }]}>Fami</Text>
+          <Text style={[styles.bubbleName, { color: "#22D3EE" }]}>Alaju</Text>
         )}
         {isUser && memberName && (
           <Text style={[styles.bubbleName, { color: "rgba(255,255,255,0.7)" }]}>{memberName}</Text>
@@ -86,7 +88,7 @@ export default function HomeScreen() {
     (async () => {
       // Initialize family if needed
       const family = (await getFamily()) || (await createDefaultFamily());
-      const member = family.members.find((m) => m.isActive) || family.members[0];
+      const member = family.members.find((m: any) => m.isActive) || family.members[0];
       setActiveMember(member || null);
 
       const settings = await getSettings();
@@ -224,11 +226,12 @@ export default function HomeScreen() {
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <View style={styles.headerLeft}>
-          <View style={[styles.famiLogo, { backgroundColor: "#1A3A5C" }]}>
-            <Text style={styles.famiLogoText}>F</Text>
-          </View>
+          <Image
+            source={{ uri: "https://d2xsxph8kpxj0f.cloudfront.net/310419663030092336/Dg9rCS6mqHJnEdKLTNr2hB/alaju-icon-eQ8gwiLL93J285qCdGsNhs.png" }}
+            style={styles.famiLogo}
+          />
           <View>
-            <Text style={[styles.headerTitle, { color: colors.foreground }]}>Fami</Text>
+            <Text style={[styles.headerTitle, { color: colors.foreground }]}>Alaju</Text>
             <Text style={[styles.headerSub, { color: colors.muted }]}>
               {greeting()}{activeMember ? `, ${activeMember.name}` : ""}!
             </Text>
@@ -237,15 +240,11 @@ export default function HomeScreen() {
         <View style={styles.headerRight}>
           <Pressable
             style={({ pressed }) => [styles.headerBtn, pressed && { opacity: 0.6 }]}
-            onPress={() => {
-              setVoiceEnabled(!voiceEnabled);
-              if (voiceEnabled) Speech.stop();
-            }}
+            onPress={() => router.push("/avatar-chat" as any)}
           >
-            <IconSymbol
-              name={voiceEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill"}
-              size={22}
-              color={voiceEnabled ? "#1A3A5C" : colors.muted}
+            <Image
+              source={{ uri: "https://d2xsxph8kpxj0f.cloudfront.net/310419663030092336/Dg9rCS6mqHJnEdKLTNr2hB/alaju-avatar-cmDpNksKLQqCob9bJ3No9k.png" }}
+              style={styles.avatarThumb}
             />
           </Pressable>
           <Pressable
@@ -278,14 +277,23 @@ export default function HomeScreen() {
       {/* Chat area */}
       {messages.length === 0 ? (
         <View style={styles.emptyChat}>
-          <View style={[styles.emptyIcon, { backgroundColor: "#1A3A5C11" }]}>
-            <IconSymbol name="mic.fill" size={40} color="#1A3A5C" />
-          </View>
+          <Pressable
+            style={[styles.emptyAvatarBtn]}
+            onPress={() => router.push("/avatar-chat" as any)}
+          >
+            <Image
+              source={{ uri: "https://d2xsxph8kpxj0f.cloudfront.net/310419663030092336/Dg9rCS6mqHJnEdKLTNr2hB/alaju-avatar-cmDpNksKLQqCob9bJ3No9k.png" }}
+              style={styles.emptyAvatar}
+            />
+            <View style={styles.avatarBadge}>
+              <IconSymbol name="mic.fill" size={14} color="#fff" />
+            </View>
+          </Pressable>
           <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-            Olá! Sou a Fami 👋
+            Olá! Sou a Alaju 👋
           </Text>
           <Text style={[styles.emptyDesc, { color: colors.muted }]}>
-            Sua assistente familiar. Posso ajudar com lembretes, lista de compras, saúde, estudos e muito mais.
+            Sua assistente familiar. Toque no avatar para conversar com voz e imagem, ou escreva abaixo.
           </Text>
           <View style={styles.suggestions}>
             {[
@@ -328,7 +336,7 @@ export default function HomeScreen() {
         <View style={styles.inputRow}>
           <TextInput
             style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
-            placeholder="Fale com a Fami..."
+            placeholder="Fale com a Alaju..."
             placeholderTextColor={colors.muted}
             value={inputText}
             onChangeText={setInputText}
@@ -368,10 +376,36 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
+  },
+  avatarThumb: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 2,
+    borderColor: "#22D3EE",
+  },
+  emptyAvatarBtn: {
+    position: "relative",
+    marginBottom: 4,
+  },
+  emptyAvatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 3,
+    borderColor: "#22D3EE",
+  },
+  avatarBadge: {
+    position: "absolute",
+    bottom: 2,
+    right: 2,
+    backgroundColor: "#22D3EE",
+    borderRadius: 12,
+    width: 24,
+    height: 24,
     alignItems: "center",
     justifyContent: "center",
   },
-  famiLogoText: { color: "#fff", fontWeight: "800", fontSize: 18 },
   headerTitle: { fontSize: 18, fontWeight: "700" },
   headerSub: { fontSize: 12 },
   headerRight: { flexDirection: "row", gap: 4 },
@@ -425,11 +459,10 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
     alignSelf: "flex-end",
+    borderWidth: 1,
+    borderColor: "#22D3EE",
   },
-  botAvatarText: { color: "#fff", fontWeight: "800", fontSize: 14 },
   bubble: {
     maxWidth: "78%",
     borderRadius: 18,

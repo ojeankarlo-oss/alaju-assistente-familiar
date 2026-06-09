@@ -42,14 +42,14 @@ export const appRouter = router({
         const name = input.memberName || "você";
 
         const systemPrompt = isChild
-          ? `Você é uma assistente familiar amigável e educativa chamada "Fami". 
+          ? `Você é uma assistente familiar amigável e educativa chamada "Alaju". 
 Você está conversando com uma criança chamada ${name}.
 Seja sempre gentil, paciente e use linguagem simples adequada para crianças.
 Quando ajudar com lições de escola, explique passo a passo e incentive a criança a tentar resolver.
 Nunca dê respostas prontas para exercícios — guie o raciocínio.
 Evite qualquer conteúdo inadequado para crianças.
 Responda sempre em português brasileiro.`
-          : `Você é uma assistente familiar inteligente e prestativa chamada "Fami".
+          : `Você é uma assistente familiar inteligente e prestativa chamada "Alaju".
 Você está conversando com ${name}.
 Você pode ajudar com: lembretes, lista de compras, informações sobre saúde e bem-estar, 
 chamar aplicativos de corrida, ajudar crianças com estudos e organizar a rotina familiar.
@@ -170,7 +170,7 @@ ${input.context ? `\nContexto familiar: ${input.context}` : ""}`;
             return `${done} ${i.name}${qty}`;
           })
           .join("\n");
-        const footer = `\n\n_Enviado pelo Assistente Familiar_ 🏠`;
+        const footer = `\n\n_Enviado pelo Alaju_ 🏠`;
         const text = header + itemLines + footer;
         const ok = await sendTelegramMessage(input.botToken, input.chatId, text);
         return { ok };
@@ -190,7 +190,7 @@ ${input.context ? `\nContexto familiar: ${input.context}` : ""}`;
       .mutation(async ({ input }) => {
         const who = input.memberName ? ` para *${input.memberName}*` : "";
         const desc = input.description ? `\n📝 ${input.description}` : "";
-        const text = `⏰ *Lembrete${who}*\n\n${input.title}${desc}\n\n_Assistente Familiar_ 🏠`;
+        const text = `⏰ *Lembrete${who}*\n\n${input.title}${desc}\n\n_Alaju_ 🏠`;
         const ok = await sendTelegramMessage(input.botToken, input.chatId, text);
         return { ok };
       }),
@@ -216,7 +216,7 @@ ${input.context ? `\nContexto familiar: ${input.context}` : ""}`;
         const ok = await sendTelegramMessage(
           input.botToken,
           input.chatId,
-          "✅ *Assistente Familiar* conectada com sucesso! 🏠"
+          "✅ *Alaju* conectada com sucesso! 🏠"
         );
         return { ok };
       }),
