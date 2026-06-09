@@ -1,48 +1,467 @@
-import { ScrollView, Text, View, TouchableOpacity } from "react-native";
-
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Alert,
+  FlatList,
+  Linking,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import * as Haptics from "expo-haptics";
+import * as Speech from "expo-speech";
+import { router } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
+import { IconSymbol } from "@/components/ui/icon-symbol";
+import { useColors } from "@/hooks/use-colors";
+import {
+  addChatMessage,
+  addReminder,
+  addShoppingItem,
+  createDefaultFamily,
+  getActiveShoppingList,
+  getChatHistory,
+  getFamily,
+  getSettings,
+} from "@/lib/family-store";
+import { trpc } from "@/lib/trpc";
+import type { ChatMessage, FamilyMember } from "@/shared/types";
 
-/**
- * Home Screen - NativeWind Example
- *
- * This template uses NativeWind (Tailwind CSS for React Native).
- * You can use familiar Tailwind classes directly in className props.
- *
- * Key patterns:
- * - Use `className` instead of `style` for most styling
- * - Theme colors: use tokens directly (bg-background, text-foreground, bg-primary, etc.); no dark: prefix needed
- * - Responsive: standard Tailwind breakpoints work on web
- * - Custom colors defined in tailwind.config.js
- */
-export default function HomeScreen() {
+const QUICK_ACTIONS = [
+  { id: "reminder", icon: "bell.fill" as const, label: "Lembrete", color: "#F59E0B", tab: "/reminders" },
+  { id: "shopping", icon: "cart.fill" as const, label: "Compras", color: "#22C55E", tab: "/shopping" },
+  { id: "health", icon: "heart.fill" as const, label: "Saúde", color: "#EF4444", tab: "/health" },
+  { id: "study", icon: "book.fill" as const, label: "Estudos", color: "#8B5CF6", tab: "/study" },
+];
+
+function ChatBubble({ msg, memberName }: { msg: ChatMessage; memberName?: string }) {
+  const colors = useColors();
+  const isUser = msg.role === "user";
   return (
-    <ScreenContainer className="p-6">
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        <View className="flex-1 gap-8">
-          {/* Hero Section */}
-          <View className="items-center gap-2">
-            <Text className="text-4xl font-bold text-foreground">Welcome</Text>
-            <Text className="text-base text-muted text-center">
-              Edit app/(tabs)/index.tsx to get started
-            </Text>
-          </View>
+    <View style={[styles.bubbleRow, isUser ? styles.bubbleRowUser : styles.bubbleRowBot]}>
+      {!isUser && (
+        <View style={[styles.botAvatar, { backgroundColor: "#1A3A5C" }]}>
+          <Text style={styles.botAvatarText}>F</Text>
+        </View>
+      )}
+      <View
+        style={[
+          styles.bubble,
+          isUser
+            ? { backgroundColor: "#1A3A5C" }
+            : { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 },
+        ]}
+      >
+        {!isUser && (
+          <Text style={[styles.bubbleName, { color: "#1A3A5C" }]}>Fami</Text>
+        )}
+        {isUser && memberName && (
+          <Text style={[styles.bubbleName, { color: "rgba(255,255,255,0.7)" }]}>{memberName}</Text>
+        )}
+        <Text style={[styles.bubbleText, { color: isUser ? "#fff" : colors.foreground }]}>
+          {msg.content}
+        </Text>
+        <Text style={[styles.bubbleTime, { color: isUser ? "rgba(255,255,255,0.6)" : colors.muted }]}>
+          {new Date(msg.timestamp).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+        </Text>
+      </View>
+    </View>
+  );
+}
 
-          {/* Example Card */}
-          <View className="w-full max-w-sm self-center bg-surface rounded-2xl p-6 shadow-sm border border-border">
-            <Text className="text-lg font-semibold text-foreground mb-2">NativeWind Ready</Text>
-            <Text className="text-sm text-muted leading-relaxed">
-              Use Tailwind CSS classes directly in your React Native components.
-            </Text>
-          </View>
+export default function HomeScreen() {
+  const colors = useColors();
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [inputText, setInputText] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [activeMember, setActiveMember] = useState<FamilyMember | null>(null);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const flatListRef = useRef<FlatList>(null);
 
-          {/* Example Button */}
-          <View className="items-center">
-            <TouchableOpacity className="bg-primary px-6 py-3 rounded-full active:opacity-80">
-              <Text className="text-background font-semibold">Get Started</Text>
-            </TouchableOpacity>
+  const chatMutation = trpc.assistant.chat.useMutation();
+
+  useEffect(() => {
+    (async () => {
+      // Initialize family if needed
+      const family = (await getFamily()) || (await createDefaultFamily());
+      const member = family.members.find((m) => m.isActive) || family.members[0];
+      setActiveMember(member || null);
+
+      const settings = await getSettings();
+      setVoiceEnabled(settings.voiceEnabled);
+
+      // Load recent chat history
+      const history = await getChatHistory();
+      setMessages(history.slice(-30));
+    })();
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+  }, []);
+
+  const speakResponse = useCallback(
+    (text: string) => {
+      if (!voiceEnabled || Platform.OS === "web") return;
+      Speech.stop();
+      Speech.speak(text, {
+        language: "pt-BR",
+        rate: 0.95,
+        pitch: 1.0,
+      });
+    },
+    [voiceEnabled]
+  );
+
+  const handleAction = useCallback(
+    async (action: string | null, actionData: Record<string, string>, responseText: string) => {
+      if (!action) return;
+
+      if (action === "open_ride_app") {
+        const dest = actionData.destination || "";
+        const uberUrl = dest
+          ? `uber://?action=setPickup&pickup=my_location&dropoff[formatted_address]=${encodeURIComponent(dest)}`
+          : "uber://";
+        const supported = await Linking.canOpenURL(uberUrl);
+        if (supported) {
+          await Linking.openURL(uberUrl);
+        } else {
+          // Fallback to 99 or web
+          const fallback99 = "https://99app.com";
+          await Linking.openURL(fallback99);
+        }
+      } else if (action === "create_reminder") {
+        router.push("/(tabs)/reminders" as any);
+      } else if (action === "add_shopping") {
+        router.push("/(tabs)/shopping" as any);
+      } else if (action === "health_log") {
+        router.push("/(tabs)/health" as any);
+      } else if (action === "study_help") {
+        router.push("/(tabs)/study" as any);
+      }
+    },
+    []
+  );
+
+  const sendMessage = useCallback(
+    async (text: string) => {
+      if (!text.trim() || isLoading) return;
+      if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+      const userMsg: ChatMessage = {
+        id: Date.now().toString(),
+        role: "user",
+        content: text.trim(),
+        timestamp: new Date().toISOString(),
+        memberId: activeMember?.id,
+      };
+
+      const newMessages = [...messages, userMsg];
+      setMessages(newMessages);
+      setInputText("");
+      setIsLoading(true);
+      scrollToBottom();
+
+      await addChatMessage({
+        role: "user",
+        content: text.trim(),
+        timestamp: userMsg.timestamp,
+        memberId: activeMember?.id,
+      });
+
+      try {
+        const result = await chatMutation.mutateAsync({
+          message: text.trim(),
+          memberName: activeMember?.name,
+          memberRole: activeMember?.role,
+        });
+
+        const botMsg: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: result.text,
+          timestamp: new Date().toISOString(),
+        };
+
+        setMessages((prev) => [...prev, botMsg]);
+        await addChatMessage({
+          role: "assistant",
+          content: result.text,
+          timestamp: botMsg.timestamp,
+        });
+
+        speakResponse(result.text);
+        await handleAction(result.action, result.actionData, result.text);
+        scrollToBottom();
+      } catch {
+        const errMsg: ChatMessage = {
+          id: (Date.now() + 2).toString(),
+          role: "assistant",
+          content: "Desculpe, não consegui processar sua mensagem. Tente novamente.",
+          timestamp: new Date().toISOString(),
+        };
+        setMessages((prev) => [...prev, errMsg]);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [messages, isLoading, activeMember, chatMutation, speakResponse, handleAction, scrollToBottom]
+  );
+
+  const handleSend = useCallback(() => sendMessage(inputText), [sendMessage, inputText]);
+
+  const greeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Bom dia";
+    if (hour < 18) return "Boa tarde";
+    return "Boa noite";
+  };
+
+  return (
+    <ScreenContainer containerClassName="bg-background">
+      {/* Header */}
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <View style={styles.headerLeft}>
+          <View style={[styles.famiLogo, { backgroundColor: "#1A3A5C" }]}>
+            <Text style={styles.famiLogoText}>F</Text>
+          </View>
+          <View>
+            <Text style={[styles.headerTitle, { color: colors.foreground }]}>Fami</Text>
+            <Text style={[styles.headerSub, { color: colors.muted }]}>
+              {greeting()}{activeMember ? `, ${activeMember.name}` : ""}!
+            </Text>
           </View>
         </View>
-      </ScrollView>
+        <View style={styles.headerRight}>
+          <Pressable
+            style={({ pressed }) => [styles.headerBtn, pressed && { opacity: 0.6 }]}
+            onPress={() => {
+              setVoiceEnabled(!voiceEnabled);
+              if (voiceEnabled) Speech.stop();
+            }}
+          >
+            <IconSymbol
+              name={voiceEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill"}
+              size={22}
+              color={voiceEnabled ? "#1A3A5C" : colors.muted}
+            />
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.headerBtn, pressed && { opacity: 0.6 }]}
+            onPress={() => router.push("/settings" as any)}
+          >
+            <IconSymbol name="gear" size={22} color={colors.foreground} />
+          </Pressable>
+        </View>
+      </View>
+
+      {/* Quick actions */}
+      <View style={[styles.quickActions, { borderBottomColor: colors.border }]}>
+        {QUICK_ACTIONS.map((action) => (
+          <Pressable
+            key={action.id}
+            style={({ pressed }) => [
+              styles.quickBtn,
+              { backgroundColor: action.color + "18", borderColor: action.color + "44" },
+              pressed && { opacity: 0.75 },
+            ]}
+            onPress={() => router.push(action.tab as any)}
+          >
+            <IconSymbol name={action.icon} size={20} color={action.color} />
+            <Text style={[styles.quickLabel, { color: action.color }]}>{action.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {/* Chat area */}
+      {messages.length === 0 ? (
+        <View style={styles.emptyChat}>
+          <View style={[styles.emptyIcon, { backgroundColor: "#1A3A5C11" }]}>
+            <IconSymbol name="mic.fill" size={40} color="#1A3A5C" />
+          </View>
+          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+            Olá! Sou a Fami 👋
+          </Text>
+          <Text style={[styles.emptyDesc, { color: colors.muted }]}>
+            Sua assistente familiar. Posso ajudar com lembretes, lista de compras, saúde, estudos e muito mais.
+          </Text>
+          <View style={styles.suggestions}>
+            {[
+              "Me lembre de tomar remédio às 8h",
+              "Adicionar leite na lista de compras",
+              "Me dê uma dica de saúde",
+              "Chamar um Uber",
+            ].map((s) => (
+              <Pressable
+                key={s}
+                style={[styles.suggestion, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                onPress={() => sendMessage(s)}
+              >
+                <Text style={[styles.suggestionText, { color: colors.foreground }]}>{s}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : (
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <ChatBubble msg={item} memberName={activeMember?.name} />
+          )}
+          contentContainerStyle={styles.chatContent}
+          showsVerticalScrollIndicator={false}
+          onContentSizeChange={scrollToBottom}
+        />
+      )}
+
+      {/* Input area */}
+      <View style={[styles.inputArea, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
+        {isLoading && (
+          <View style={styles.typingIndicator}>
+            <Text style={[styles.typingText, { color: colors.muted }]}>Fami está digitando...</Text>
+          </View>
+        )}
+        <View style={styles.inputRow}>
+          <TextInput
+            style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
+            placeholder="Fale com a Fami..."
+            placeholderTextColor={colors.muted}
+            value={inputText}
+            onChangeText={setInputText}
+            onSubmitEditing={handleSend}
+            returnKeyType="send"
+            editable={!isLoading}
+            multiline
+          />
+          <Pressable
+            style={({ pressed }) => [
+              styles.sendBtn,
+              { backgroundColor: isLoading || !inputText.trim() ? colors.muted : "#1A3A5C" },
+              pressed && { opacity: 0.8 },
+            ]}
+            onPress={handleSend}
+            disabled={isLoading || !inputText.trim()}
+          >
+            <IconSymbol name="paperplane.fill" size={18} color="#fff" />
+          </Pressable>
+        </View>
+      </View>
     </ScreenContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 0.5,
+  },
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
+  famiLogo: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  famiLogoText: { color: "#fff", fontWeight: "800", fontSize: 18 },
+  headerTitle: { fontSize: 18, fontWeight: "700" },
+  headerSub: { fontSize: 12 },
+  headerRight: { flexDirection: "row", gap: 4 },
+  headerBtn: { padding: 8 },
+  quickActions: {
+    flexDirection: "row",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+    borderBottomWidth: 0.5,
+  },
+  quickBtn: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 4,
+  },
+  quickLabel: { fontSize: 11, fontWeight: "600" },
+  emptyChat: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    gap: 12,
+  },
+  emptyIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  emptyTitle: { fontSize: 22, fontWeight: "700", textAlign: "center" },
+  emptyDesc: { fontSize: 15, textAlign: "center", lineHeight: 22 },
+  suggestions: { width: "100%", gap: 8, marginTop: 8 },
+  suggestion: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  suggestionText: { fontSize: 14 },
+  chatContent: { padding: 16, gap: 8 },
+  bubbleRow: { flexDirection: "row", gap: 8, marginBottom: 4 },
+  bubbleRowUser: { justifyContent: "flex-end" },
+  bubbleRowBot: { justifyContent: "flex-start" },
+  botAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "flex-end",
+  },
+  botAvatarText: { color: "#fff", fontWeight: "800", fontSize: 14 },
+  bubble: {
+    maxWidth: "78%",
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 2,
+  },
+  bubbleName: { fontSize: 11, fontWeight: "700", marginBottom: 2 },
+  bubbleText: { fontSize: 15, lineHeight: 22 },
+  bubbleTime: { fontSize: 10, alignSelf: "flex-end", marginTop: 2 },
+  inputArea: {
+    borderTopWidth: 0.5,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  typingIndicator: { paddingBottom: 6 },
+  typingText: { fontSize: 12, fontStyle: "italic" },
+  inputRow: { flexDirection: "row", alignItems: "flex-end", gap: 8 },
+  input: {
+    flex: 1,
+    borderRadius: 22,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 15,
+    maxHeight: 100,
+  },
+  sendBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});
