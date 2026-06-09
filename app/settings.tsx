@@ -203,6 +203,16 @@ export default function SettingsScreen() {
             <Text style={[styles.navLabel, { color: colors.foreground }]}>Gerenciar Família</Text>
             <IconSymbol name="chevron.right" size={18} color={colors.muted} />
           </Pressable>
+          <Pressable
+            style={[styles.navRow, { borderBottomColor: "transparent" }]}
+            onPress={() => router.push("/voice-calibration" as any)}
+          >
+            <View style={[styles.settingIcon, { backgroundColor: "#22D3EE22" }]}>
+              <IconSymbol name="waveform" size={18} color="#22D3EE" />
+            </View>
+            <Text style={[styles.navLabel, { color: colors.foreground }]}>Calibrar Voz dos Membros</Text>
+            <IconSymbol name="chevron.right" size={18} color={colors.muted} />
+          </Pressable>
         </View>
 
         {/* About */}
@@ -211,7 +221,7 @@ export default function SettingsScreen() {
           <SettingRow
             icon="info.circle.fill"
             iconColor="#2E86C1"
-            label="Fami — Assistente Familiar"
+            label="Alaju — Assistente Familiar"
             sublabel="Versão 1.0 MVP"
           />
           <SettingRow

@@ -92,3 +92,11 @@
 - [x] Resposta de voz automática ao ser acionada ("No que posso ajudar?")
 - [x] Indicador visual de escuta ativa (microfone pulsando)
 - [x] Fluxo completo: gravar → transcrever → responder por voz e texto
+
+## Reconhecimento de Voz Nativo e Calibração
+- [x] Instalar expo-speech-recognition para reconhecimento de voz nativo
+- [x] Substituir gravação de áudio por reconhecimento de voz em tempo real
+- [x] Detecção de wake word "Oi Alaju" em tempo real
+- [x] Tela de calibração de voz por perfil familiar
+- [x] Identificação automática de quem está falando
+- [x] Perfil aprende preferências ao longo do uso

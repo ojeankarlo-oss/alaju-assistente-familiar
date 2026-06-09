@@ -87,6 +87,13 @@ const config: ExpoConfig = {
   plugins: [
     "expo-router",
     [
+      "expo-speech-recognition",
+      {
+        "microphonePermission": "Permitir que a Alaju acesse seu microfone para reconhecer sua voz.",
+        "speechRecognitionPermission": "Permitir que a Alaju reconheça sua voz para responder aos seus comandos."
+      }
+    ],
+    [
       "expo-audio",
       {
         microphonePermission: "Allow $(PRODUCT_NAME) to access your microphone.",

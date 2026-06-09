@@ -25,8 +25,28 @@ import {
 } from "@/lib/family-store";
 import type { FamilyMember, FamilyProfile } from "@/shared/types";
 
-const ROLE_COLORS = { adult: "#1A3A5C", child: "#8B5CF6" };
-const ROLE_LABELS = { adult: "Adulto", child: "Criança" };
+const ROLE_COLORS: Record<string, string> = {
+  adult: "#1A3A5C",
+  child: "#8B5CF6",
+  pai: "#1A3A5C",
+  mãe: "#E879A0",
+  filho: "#8B5CF6",
+  filha: "#A855F7",
+  avô: "#059669",
+  avó: "#0891B2",
+  outro: "#6B7280",
+};
+const ROLE_LABELS: Record<string, string> = {
+  adult: "Adulto",
+  child: "Criança",
+  pai: "Pai",
+  mãe: "Mãe",
+  filho: "Filho",
+  filha: "Filha",
+  avô: "Avô",
+  avó: "Avó",
+  outro: "Outro",
+};
 
 function MemberCard({
   member,

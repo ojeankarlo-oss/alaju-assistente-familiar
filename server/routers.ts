@@ -33,7 +33,7 @@ export const appRouter = router({
         z.object({
           message: z.string().min(1).max(2000),
           memberName: z.string().optional(),
-          memberRole: z.enum(["adult", "child"]).optional(),
+          memberRole: z.enum(["adult", "child", "pai", "mãe", "filho", "filha", "avô", "avó", "outro"]).optional(),
           context: z.string().optional(), // JSON string with family context
         })
       )

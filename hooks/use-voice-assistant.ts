@@ -1,12 +1,9 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 import {
-  RecordingPresets,
-  requestRecordingPermissionsAsync,
-  setAudioModeAsync,
-  useAudioRecorder,
-  useAudioRecorderState,
-} from "expo-audio";
+  ExpoSpeechRecognitionModule,
+  useSpeechRecognitionEvent,
+} from "expo-speech-recognition";
 import * as Speech from "expo-speech";
 import { trpc } from "@/lib/trpc";
 
@@ -17,7 +14,7 @@ export type VoiceState =
   | "speaking"
   | "error";
 
-// Frases de resposta ao ser acionada
+// Frases de resposta ao ser acionada pela wake word
 const WAKE_RESPONSES = [
   "Olá! No que posso ajudar hoje?",
   "Oi! Do que você precisa?",
@@ -48,14 +45,89 @@ function containsWakeWord(text: string): boolean {
 export function useVoiceAssistant(onTranscript?: (text: string) => void) {
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [transcript, setTranscript] = useState("");
+  const [interimTranscript, setInterimTranscript] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [wakeWordDetected, setWakeWordDetected] = useState(false);
-  const isRecordingRef = useRef(false);
+  const isListeningRef = useRef(false);
+  const finalTranscriptRef = useRef("");
 
-  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const recorderState = useAudioRecorderState(audioRecorder);
+  const chatMutation = trpc.assistant.chat.useMutation();
 
-  const transcribeMutation = trpc.assistant.transcribe.useMutation();
+  // ── Eventos do reconhecimento de voz ──────────────────────────────────────
+
+  // Resultado parcial (em tempo real enquanto fala)
+  useSpeechRecognitionEvent("result", (event) => {
+    const results = event.results;
+    if (!results || results.length === 0) return;
+
+    const last = results[results.length - 1];
+    const text = last?.transcript ?? "";
+
+    if (event.isFinal || last?.confidence > 0) {
+      finalTranscriptRef.current = text;
+      setTranscript(text);
+      setInterimTranscript("");
+    } else {
+      setInterimTranscript(text);
+    }
+  });
+
+  // Reconhecimento encerrado — processar resultado
+  useSpeechRecognitionEvent("end", () => {
+    if (!isListeningRef.current) return;
+    isListeningRef.current = false;
+
+    const text = finalTranscriptRef.current.trim();
+    finalTranscriptRef.current = "";
+    setInterimTranscript("");
+
+    if (!text) {
+      setVoiceState("idle");
+      return;
+    }
+
+    setVoiceState("processing");
+
+    // Verificar wake word
+    if (containsWakeWord(text)) {
+      setWakeWordDetected(true);
+      const response = getWakeResponse();
+      speak(response, () => {
+        setWakeWordDetected(false);
+        setVoiceState("idle");
+      });
+      // Também passa o texto para o chat processar contexto
+      onTranscript?.(text);
+    } else {
+      // Comando direto — passa para o chat
+      onTranscript?.(text);
+      setVoiceState("idle");
+    }
+  });
+
+  // Erros
+  useSpeechRecognitionEvent("error", (event) => {
+    isListeningRef.current = false;
+    const code = event.error;
+
+    if (code === "no-speech") {
+      setErrorMsg("Não ouvi nada. Tente novamente.");
+    } else if (code === "not-allowed") {
+      setErrorMsg("Permissão de microfone negada.");
+    } else if (code === "network") {
+      setErrorMsg("Sem conexão. Verifique a internet.");
+    } else {
+      setErrorMsg("Não consegui entender. Tente novamente.");
+    }
+
+    setVoiceState("error");
+    setTimeout(() => {
+      setVoiceState("idle");
+      setErrorMsg("");
+    }, 3000);
+  });
+
+  // ── Síntese de voz ────────────────────────────────────────────────────────
 
   const speak = useCallback((text: string, onDone?: () => void) => {
     if (Platform.OS === "web") {
@@ -83,91 +155,57 @@ export function useVoiceAssistant(onTranscript?: (text: string) => void) {
     });
   }, []);
 
-  const stopListening = useCallback(async () => {
-    if (!isRecordingRef.current) return;
-    isRecordingRef.current = false;
-
-    try {
-      setVoiceState("processing");
-      await audioRecorder.stop();
-      const uri = audioRecorder.uri;
-
-      if (!uri) {
-        setVoiceState("idle");
-        return;
-      }
-
-      // Transcrever o áudio via backend
-      const result = await transcribeMutation.mutateAsync({ audioUrl: uri });
-      const text = result.text?.trim() || "";
-      setTranscript(text);
-
-      if (!text) {
-        setVoiceState("idle");
-        return;
-      }
-
-      // Verificar se contém wake word
-      if (containsWakeWord(text)) {
-        setWakeWordDetected(true);
-        const response = getWakeResponse();
-        speak(response, () => {
-          setWakeWordDetected(false);
-        });
-        // Notificar com o texto completo para o chat processar
-        onTranscript?.(text);
-      } else {
-        // Comando direto sem wake word — passa direto para o chat
-        onTranscript?.(text);
-        setVoiceState("idle");
-      }
-    } catch (err) {
-      console.error("Voice error:", err);
-      setErrorMsg("Não consegui entender. Tente novamente.");
-      setVoiceState("error");
-      setTimeout(() => setVoiceState("idle"), 2000);
-    }
-  }, [audioRecorder, transcribeMutation, speak, onTranscript]);
+  // ── Controles ─────────────────────────────────────────────────────────────
 
   const startListening = useCallback(async () => {
-    if (isRecordingRef.current || voiceState === "speaking") return;
+    if (isListeningRef.current || voiceState === "speaking") return;
+
+    if (Platform.OS === "web") {
+      setErrorMsg("Reconhecimento de voz não disponível no navegador.");
+      setVoiceState("error");
+      setTimeout(() => { setVoiceState("idle"); setErrorMsg(""); }, 3000);
+      return;
+    }
 
     try {
-      // Solicitar permissão de microfone
-      const { granted } = await requestRecordingPermissionsAsync();
-      if (!granted) {
+      // Solicitar permissão
+      const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!result.granted) {
         setErrorMsg("Permissão de microfone negada.");
         setVoiceState("error");
-        setTimeout(() => setVoiceState("idle"), 2000);
+        setTimeout(() => { setVoiceState("idle"); setErrorMsg(""); }, 3000);
         return;
       }
 
-      await setAudioModeAsync({
-        playsInSilentMode: true,
-        allowsRecording: true,
-      });
-
-      await audioRecorder.prepareToRecordAsync();
-      audioRecorder.record();
-      isRecordingRef.current = true;
-      setVoiceState("listening");
+      finalTranscriptRef.current = "";
       setTranscript("");
+      setInterimTranscript("");
       setErrorMsg("");
       setWakeWordDetected(false);
+      isListeningRef.current = true;
+      setVoiceState("listening");
 
-      // Auto-parar após 8 segundos para evitar gravações infinitas
-      setTimeout(() => {
-        if (isRecordingRef.current) {
-          stopListening();
-        }
-      }, 8000);
+      ExpoSpeechRecognitionModule.start({
+        lang: "pt-BR",
+        interimResults: true,
+        maxAlternatives: 1,
+        continuous: false,
+        requiresOnDeviceRecognition: false,
+        addsPunctuation: true,
+      });
     } catch (err) {
-      console.error("Start recording error:", err);
-      setErrorMsg("Erro ao acessar o microfone.");
+      console.error("Speech recognition start error:", err);
+      isListeningRef.current = false;
+      setErrorMsg("Erro ao iniciar reconhecimento de voz.");
       setVoiceState("error");
-      setTimeout(() => setVoiceState("idle"), 2000);
+      setTimeout(() => { setVoiceState("idle"); setErrorMsg(""); }, 3000);
     }
-  }, [audioRecorder, voiceState, stopListening]);
+  }, [voiceState]);
+
+  const stopListening = useCallback(() => {
+    if (!isListeningRef.current) return;
+    ExpoSpeechRecognitionModule.stop();
+  }, []);
 
   const toggleListening = useCallback(() => {
     if (voiceState === "listening") {
@@ -177,12 +215,22 @@ export function useVoiceAssistant(onTranscript?: (text: string) => void) {
     }
   }, [voiceState, startListening, stopListening]);
 
+  // Cleanup ao desmontar
+  useEffect(() => {
+    return () => {
+      if (isListeningRef.current) {
+        ExpoSpeechRecognitionModule.stop();
+      }
+      Speech.stop();
+    };
+  }, []);
+
   return {
     voiceState,
     transcript,
+    interimTranscript,
     errorMsg,
     wakeWordDetected,
-    isRecording: recorderState.isRecording,
     startListening,
     stopListening,
     toggleListening,

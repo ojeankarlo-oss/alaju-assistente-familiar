@@ -3,10 +3,17 @@
 export interface FamilyMember {
   id: string;
   name: string;
-  role: "adult" | "child";
+  role: "adult" | "child" | "pai" | "mãe" | "filho" | "filha" | "avô" | "avó" | "outro";
   avatar?: string;
   age?: number;
   isActive?: boolean;
+  // Calibração de voz
+  voiceSignature?: string;
+  voiceCalibrated?: boolean;
+  // Perfil de aprendizado
+  preferences?: Record<string, string>;
+  conversationCount?: number;
+  lastSeen?: string;
 }
 
 export interface FamilyProfile {
