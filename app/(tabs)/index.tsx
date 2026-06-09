@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 import * as Haptics from "expo-haptics";
-import * as Speech from "expo-speech";
+import { speakNatural } from "@/lib/voice-utils";
 import { router } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { VoiceButton } from "@/components/voice-button";
@@ -121,12 +121,7 @@ export default function HomeScreen() {
   const speakResponse = useCallback(
     (text: string) => {
       if (!voiceEnabled || Platform.OS === "web") return;
-      Speech.stop().catch(() => {});
-      Speech.speak(text, {
-        language: "pt-BR",
-        rate: 0.95,
-        pitch: 1.0,
-      });
+      speakNatural(text);
     },
     [voiceEnabled]
   );

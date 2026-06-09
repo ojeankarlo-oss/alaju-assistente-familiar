@@ -4,7 +4,7 @@ import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
 } from "expo-speech-recognition";
-import * as Speech from "expo-speech";
+import { speakNatural, stopSpeaking } from "@/lib/voice-utils";
 import { trpc } from "@/lib/trpc";
 
 export type VoiceState =
@@ -86,20 +86,40 @@ export function useVoiceAssistant(onTranscript?: (text: string) => void) {
       return;
     }
 
-    setVoiceState("processing");
-
     // Verificar wake word
     if (containsWakeWord(text)) {
       setWakeWordDetected(true);
+      setVoiceState("speaking");
+
+      // Responder com voz natural feminina
       const response = getWakeResponse();
-      speak(response, () => {
-        setWakeWordDetected(false);
-        setVoiceState("idle");
+      speakNatural(response, {
+        onStart: () => setVoiceState("speaking"),
+        onDone: () => {
+          setWakeWordDetected(false);
+          setVoiceState("idle");
+        },
+        onStopped: () => {
+          setWakeWordDetected(false);
+          setVoiceState("idle");
+        },
+        onError: () => {
+          setWakeWordDetected(false);
+          setVoiceState("idle");
+        },
       });
-      // Também passa o texto para o chat processar contexto
-      onTranscript?.(text);
+
+      // Passa o texto para o chat processar contexto (sem a wake word)
+      const commandText = text
+        .toLowerCase()
+        .replace(/^(oi|olá|ola|hey|ei)\s+alaju\s*/i, "")
+        .trim();
+      if (commandText) {
+        onTranscript?.(commandText);
+      }
     } else {
       // Comando direto — passa para o chat
+      setVoiceState("processing");
       onTranscript?.(text);
       setVoiceState("idle");
     }
@@ -134,12 +154,9 @@ export function useVoiceAssistant(onTranscript?: (text: string) => void) {
       onDone?.();
       return;
     }
-    Speech.stop().catch(() => {});
     setVoiceState("speaking");
-    Speech.speak(text, {
-      language: "pt-BR",
-      rate: 0.95,
-      pitch: 1.05,
+    speakNatural(text, {
+      onStart: () => setVoiceState("speaking"),
       onDone: () => {
         setVoiceState("idle");
         onDone?.();
@@ -191,7 +208,7 @@ export function useVoiceAssistant(onTranscript?: (text: string) => void) {
         maxAlternatives: 1,
         continuous: false,
         requiresOnDeviceRecognition: false,
-        addsPunctuation: true,
+        addsPunctuation: false,
       });
     } catch (err) {
       console.error("Speech recognition start error:", err);
@@ -221,7 +238,7 @@ export function useVoiceAssistant(onTranscript?: (text: string) => void) {
       if (isListeningRef.current) {
         ExpoSpeechRecognitionModule.stop();
       }
-      Speech.stop().catch(() => {});
+      stopSpeaking().catch(() => {});
     };
   }, []);
 

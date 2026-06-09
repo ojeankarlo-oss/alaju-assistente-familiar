@@ -11,7 +11,7 @@ import {
   Platform,
 } from "react-native";
 import * as Haptics from "expo-haptics";
-import * as Speech from "expo-speech";
+import { speakNatural, stopSpeaking } from "@/lib/voice-utils";
 import { router } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -174,12 +174,8 @@ export default function AvatarChatScreen() {
   const speakResponse = useCallback(
     (text: string) => {
       if (!voiceEnabled || Platform.OS === "web") return;
-      Speech.stop().catch(() => {});
       setIsSpeaking(true);
-      Speech.speak(text, {
-        language: "pt-BR",
-        rate: 0.95,
-        pitch: 1.05,
+      speakNatural(text, {
         onDone: () => setIsSpeaking(false),
         onStopped: () => setIsSpeaking(false),
         onError: () => setIsSpeaking(false),
@@ -265,7 +261,7 @@ export default function AvatarChatScreen() {
         <Pressable
           style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
           onPress={() => {
-            Speech.stop().catch(() => {});
+            stopSpeaking();
             router.back();
           }}
         >
@@ -276,7 +272,7 @@ export default function AvatarChatScreen() {
           style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
           onPress={() => {
             setVoiceEnabled(!voiceEnabled);
-            if (voiceEnabled) Speech.stop().catch(() => {});
+            if (voiceEnabled) stopSpeaking();
           }}
         >
           <IconSymbol

@@ -13,7 +13,7 @@ import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
 } from "expo-speech-recognition";
-import * as Speech from "expo-speech";
+import { speakNatural, stopSpeaking } from "@/lib/voice-utils";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
@@ -118,10 +118,7 @@ export default function VoiceCalibrationScreen() {
       setLastHeard("");
       // Instrui a próxima frase
       setTimeout(() => {
-        Speech.speak(
-          `Agora diga: ${CALIBRATION_PHRASES[nextIdx]}`,
-          { language: "pt-BR", rate: 0.9 }
-        );
+        speakNatural(`Agora diga: ${CALIBRATION_PHRASES[nextIdx]}`);
       }, 800);
     }
   });
@@ -130,7 +127,7 @@ export default function VoiceCalibrationScreen() {
     setIsListening(false);
     // Tenta novamente a mesma frase
     setTimeout(() => {
-      Speech.speak("Não ouvi direito. Tente novamente.", { language: "pt-BR" });
+      speakNatural("Não ouvi direito. Tente novamente.");
     }, 500);
   });
 
@@ -149,11 +146,9 @@ export default function VoiceCalibrationScreen() {
     setLastHeard("");
     setStep("calibrating");
 
-    Speech.speak(
+    speakNatural(
       `Vamos calibrar sua voz, ${selectedMember.name}. Repita cada frase que eu disser. Primeira frase: ${CALIBRATION_PHRASES[0]}`,
       {
-        language: "pt-BR",
-        rate: 0.9,
         onDone: () => {
           setTimeout(() => listenPhrase(), 500);
         },
@@ -191,9 +186,8 @@ export default function VoiceCalibrationScreen() {
       setMembers(updatedMembers);
       setStep("done");
 
-      Speech.speak(
-        `Perfeito, ${selectedMember.name}! Sua voz foi calibrada com sucesso. Agora eu vou reconhecer você quando você falar comigo.`,
-        { language: "pt-BR", rate: 0.9 }
+      speakNatural(
+        `Perfeito, ${selectedMember.name}! Sua voz foi calibrada com sucesso. Agora eu vou reconhecer você quando você falar comigo.`
       );
     },
     [selectedMember]
@@ -348,7 +342,7 @@ export default function VoiceCalibrationScreen() {
         style={[styles.btnSecondary, { borderColor: colors.border, marginTop: 24 }]}
         onPress={() => {
           ExpoSpeechRecognitionModule.stop();
-          Speech.stop().catch(() => {});
+          stopSpeaking();
           setStep("select");
           setCurrentPhraseIdx(0);
           setCapturedPhrases([]);
