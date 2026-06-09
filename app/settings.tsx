@@ -164,7 +164,7 @@ export default function SettingsScreen() {
             icon="waveform"
             iconColor="#1A3A5C"
             label="Resposta por voz"
-            sublabel="Fami fala as respostas em voz alta"
+            sublabel="Alaju fala as respostas em voz alta"
             right={
               <Switch
                 value={settings.voiceEnabled}

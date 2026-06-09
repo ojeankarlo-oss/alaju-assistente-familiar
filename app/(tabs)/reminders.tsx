@@ -250,7 +250,7 @@ export default function RemindersScreen() {
             <IconSymbol name="bell.fill" size={48} color={colors.muted} />
             <Text style={[styles.emptyText, { color: colors.muted }]}>Nenhum lembrete ainda</Text>
             <Text style={[styles.emptyHint, { color: colors.muted }]}>
-              Toque em + para criar ou peça à Fami
+              Toque em + para criar ou peça à Alaju
             </Text>
           </View>
         }

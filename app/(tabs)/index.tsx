@@ -28,6 +28,8 @@ import {
   getChatHistory,
   getFamily,
   getSettings,
+  getMemberMemoryContext,
+  recordMemberInteraction,
 } from "@/lib/family-store";
 import { trpc } from "@/lib/trpc";
 import type { ChatMessage, FamilyMember } from "@/shared/types";
@@ -186,11 +188,22 @@ export default function HomeScreen() {
       });
 
       try {
+        // Carregar contexto de memória do membro ativo
+        const memoryContext = activeMember?.id
+          ? await getMemberMemoryContext(activeMember.id)
+          : "";
+
         const result = await chatMutation.mutateAsync({
           message: text.trim(),
           memberName: activeMember?.name,
           memberRole: activeMember?.role,
+          context: memoryContext || undefined,
         });
+
+        // Registrar interação para aprendizado
+        if (activeMember?.id) {
+          await recordMemberInteraction(activeMember.id);
+        }
 
         const botMsg: ChatMessage = {
           id: (Date.now() + 1).toString(),

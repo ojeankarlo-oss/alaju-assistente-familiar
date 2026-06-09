@@ -237,3 +237,65 @@ export async function getSettings(): Promise<AssistantSettings> {
 export async function saveSettings(settings: AssistantSettings): Promise<void> {
   await AsyncStorage.setItem(KEYS.SETTINGS, JSON.stringify(settings));
 }
+
+// ─── Memória de Longo Prazo ───────────────────────────────────────────────────
+
+/**
+ * Atualiza uma preferência/memória de um membro.
+ * Exemplos de chaves: "horario_lembrete", "app_corrida", "materia_favorita", "alimento_evitar"
+ */
+export async function setMemberMemory(memberId: string, key: string, value: string): Promise<void> {
+  const profile = await getFamily();
+  if (!profile) return;
+  profile.members = profile.members.map((m) => {
+    if (m.id !== memberId) return m;
+    return {
+      ...m,
+      preferences: { ...(m.preferences ?? {}), [key]: value },
+      conversationCount: (m.conversationCount ?? 0) + 1,
+      lastSeen: new Date().toISOString(),
+    };
+  });
+  await saveFamily(profile);
+}
+
+/**
+ * Retorna todas as memórias de um membro como string formatada para o prompt da IA.
+ */
+export async function getMemberMemoryContext(memberId: string): Promise<string> {
+  const profile = await getFamily();
+  if (!profile) return "";
+  const member = profile.members.find((m) => m.id === memberId);
+  if (!member || !member.preferences || Object.keys(member.preferences).length === 0) return "";
+  const lines = Object.entries(member.preferences).map(([k, v]) => `- ${k}: ${v}`);
+  return `Memórias sobre ${member.name}:\n${lines.join("\n")}`;
+}
+
+/**
+ * Incrementa o contador de conversas e atualiza o lastSeen do membro ativo.
+ */
+export async function recordMemberInteraction(memberId: string): Promise<void> {
+  const profile = await getFamily();
+  if (!profile) return;
+  profile.members = profile.members.map((m) => {
+    if (m.id !== memberId) return m;
+    return {
+      ...m,
+      conversationCount: (m.conversationCount ?? 0) + 1,
+      lastSeen: new Date().toISOString(),
+    };
+  });
+  await saveFamily(profile);
+}
+
+/**
+ * Verifica se o onboarding já foi concluído.
+ */
+export async function isOnboardingDone(): Promise<boolean> {
+  const raw = await AsyncStorage.getItem("onboarding_done");
+  return raw === "true";
+}
+
+export async function markOnboardingDone(): Promise<void> {
+  await AsyncStorage.setItem("onboarding_done", "true");
+}

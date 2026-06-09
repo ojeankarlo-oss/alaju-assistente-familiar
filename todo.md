@@ -9,7 +9,7 @@
 ## Estrutura de navegação
 - [x] Criar tabs: Home, Lembretes, Compras, Saúde, Estudos
 - [x] Criar stack de Família e Configurações
-- [ ] Criar tela de onboarding/perfil inicial
+- [x] Criar tela de onboarding/perfil inicial
 
 ## Tela Home — Assistente
 - [x] Área de conversa (histórico de comandos e respostas)
@@ -100,3 +100,9 @@
 - [x] Tela de calibração de voz por perfil familiar
 - [x] Identificação automática de quem está falando
 - [x] Perfil aprende preferências ao longo do uso
+
+## Onboarding, Memória e Correções
+- [x] Corrigir nome "Fami" para "Alaju" nas abas e referências residuais
+- [x] Tela de onboarding com cadastro inicial da família
+- [x] Memória de longo prazo por perfil (preferências, histórico, rotina)
+- [x] Alaju usa memória nas respostas personalizadas

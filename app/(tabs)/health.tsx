@@ -277,7 +277,7 @@ export default function HealthScreen() {
             onPress={handleGetTip}
             disabled={loadingTip}
           >
-            <Text style={styles.tipBtnText}>{loadingTip ? "Gerando dica..." : "Pedir dica à Fami"}</Text>
+            <Text style={styles.tipBtnText}>{loadingTip ? "Gerando dica..." : "Pedir dica à Alaju"}</Text>
           </Pressable>
         </View>
 

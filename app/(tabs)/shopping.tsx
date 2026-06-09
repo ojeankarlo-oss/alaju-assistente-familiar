@@ -216,7 +216,7 @@ export default function ShoppingScreen() {
             <IconSymbol name="cart.fill" size={48} color={colors.muted} />
             <Text style={[styles.emptyText, { color: colors.muted }]}>Lista vazia</Text>
             <Text style={[styles.emptyHint, { color: colors.muted }]}>
-              Adicione itens abaixo ou peça à Fami
+              Adicione itens abaixo ou peça à Alaju
             </Text>
           </View>
         }
