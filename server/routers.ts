@@ -3,6 +3,53 @@ import { router, publicProcedure } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import { transcribeAudio, TranscriptionError } from "./_core/voiceTranscription";
 import { storagePut } from "./storage";
+import { ENV } from "./_core/env";
+
+// ─── ElevenLabs TTS helper ────────────────────────────────────────────────────
+
+// Voice ID da Jessica (Playful, Bright, Warm) — funciona bem em pt-BR com eleven_multilingual_v2
+const ELEVENLABS_VOICE_ID = "cgSgspJ2msm6clMCkdW9";
+const ELEVENLABS_MODEL_ID = "eleven_multilingual_v2";
+
+async function generateElevenLabsSpeech(text: string): Promise<string | null> {
+  const apiKey = ENV.elevenLabsApiKey;
+  if (!apiKey) return null;
+
+  try {
+    const res = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}?output_format=mp3_44100_128`,
+      {
+        method: "POST",
+        headers: {
+          "xi-api-key": apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text,
+          model_id: ELEVENLABS_MODEL_ID,
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.75,
+            style: 0.3,
+            use_speaker_boost: true,
+          },
+        }),
+      }
+    );
+
+    if (!res.ok) {
+      console.error("[ElevenLabs] Erro:", res.status, await res.text());
+      return null;
+    }
+
+    const buffer = await res.arrayBuffer();
+    const base64 = Buffer.from(buffer).toString("base64");
+    return base64;
+  } catch (err) {
+    console.error("[ElevenLabs] Exceção:", err);
+    return null;
+  }
+}
 
 // ─── Telegram helper ──────────────────────────────────────────────────────────
 
@@ -147,6 +194,16 @@ ${input.context ? `\nContexto familiar: ${input.context}` : ""}`;
         const key = `audio/${Date.now()}.${ext}`;
         const { url } = await storagePut(key, buffer, input.mimeType);
         return { url };
+      }),
+  }),
+
+  tts: router({
+    // Gerar áudio via ElevenLabs TTS — retorna base64 do MP3
+    speak: publicProcedure
+      .input(z.object({ text: z.string().min(1).max(1000) }))
+      .mutation(async ({ input }) => {
+        const base64 = await generateElevenLabsSpeech(input.text);
+        return { base64, available: base64 !== null };
       }),
   }),
 
