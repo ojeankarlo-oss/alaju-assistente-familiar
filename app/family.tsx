@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Alert,
   FlatList,
+  Image,
   Modal,
   Platform,
   Pressable,
@@ -10,6 +11,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
@@ -52,12 +54,27 @@ function MemberCard({
   member,
   onSetActive,
   onDelete,
+  onPhotoChange,
 }: {
   member: FamilyMember;
   onSetActive: () => void;
   onDelete: () => void;
+  onPhotoChange: (memberId: string, uri: string | null) => void;
 }) {
   const colors = useColors();
+
+  const handlePickPhoto = useCallback(async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      onPhotoChange(member.id, result.assets[0].uri);
+    }
+  }, [member.id, onPhotoChange]);
+
   return (
     <View
       style={[
@@ -69,13 +86,26 @@ function MemberCard({
         },
       ]}
     >
-      <View style={[styles.memberAvatar, { backgroundColor: ROLE_COLORS[member.role] + "22" }]}>
-        <IconSymbol
-          name={member.role === "child" ? "person.fill" : "person.circle.fill"}
-          size={28}
-          color={ROLE_COLORS[member.role]}
-        />
-      </View>
+      <Pressable
+        style={[styles.memberAvatar, { backgroundColor: ROLE_COLORS[member.role] + "22" }]}
+        onPress={handlePickPhoto}
+      >
+        {member.photoUri ? (
+          <Image
+            source={{ uri: member.photoUri }}
+            style={styles.memberPhoto}
+          />
+        ) : (
+          <IconSymbol
+            name={member.role === "child" ? "person.fill" : "person.circle.fill"}
+            size={28}
+            color={ROLE_COLORS[member.role]}
+          />
+        )}
+        <View style={[styles.photoEditBadge, { backgroundColor: ROLE_COLORS[member.role] }]}>
+          <IconSymbol name="pencil" size={8} color="#fff" />
+        </View>
+      </Pressable>
       <View style={styles.memberInfo}>
         <View style={styles.memberNameRow}>
           <Text style={[styles.memberName, { color: colors.foreground }]}>{member.name}</Text>
@@ -166,6 +196,22 @@ export default function FamilyScreen() {
     [profile, load]
   );
 
+  const handlePhotoChange = useCallback(
+    async (memberId: string, uri: string | null) => {
+      if (!profile) return;
+      if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const updated = {
+        ...profile,
+        members: profile.members.map((m) =>
+          m.id === memberId ? { ...m, photoUri: uri ?? undefined } : m
+        ),
+      };
+      await saveFamily(updated);
+      load();
+    },
+    [profile, load]
+  );
+
   const handleDelete = useCallback(
     async (memberId: string) => {
       const member = profile?.members.find((m) => m.id === memberId);
@@ -227,6 +273,7 @@ export default function FamilyScreen() {
             member={item}
             onSetActive={() => handleSetActive(item.id)}
             onDelete={() => handleDelete(item.id)}
+            onPhotoChange={handlePhotoChange}
           />
         )}
         contentContainerStyle={styles.listContent}
@@ -341,7 +388,9 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 12,
   },
-  memberAvatar: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
+  memberAvatar: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative" },
+  memberPhoto: { width: 48, height: 48, borderRadius: 24 },
+  photoEditBadge: { position: "absolute", bottom: 0, right: 0, width: 16, height: 16, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   memberInfo: { flex: 1, gap: 6 },
   memberNameRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   memberName: { fontSize: 16, fontWeight: "600" },

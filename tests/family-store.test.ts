@@ -142,6 +142,9 @@ describe("Settings", () => {
       voiceEnabled: false,
       notificationsEnabled: true,
       activeMemberId: "member1",
+      standbyMode: false,
+      selectedVoiceId: "cgSgspJ2msm6clMCkdW9",
+      selectedVoiceName: "Jessica",
     });
     const settings = await getSettings();
     expect(settings.telegramBotToken).toBe("123:ABC");

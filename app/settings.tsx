@@ -55,6 +55,9 @@ export default function SettingsScreen() {
     voiceEnabled: true,
     notificationsEnabled: true,
     activeMemberId: "",
+    standbyMode: false,
+    selectedVoiceId: "cgSgspJ2msm6clMCkdW9",
+    selectedVoiceName: "Jessica",
   });
   const [isTesting, setIsTesting] = useState(false);
   const [showToken, setShowToken] = useState(false);
@@ -188,6 +191,41 @@ export default function SettingsScreen() {
               />
             }
           />
+          <SettingRow
+            icon="mic.fill"
+            iconColor="#EF4444"
+            label="Modo Plantão"
+            sublabel="Alaju ouve continuamente por 'Oi Alaju'"
+            right={
+              <Switch
+                value={settings.standbyMode}
+                onValueChange={(v) => {
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  handleSave({ ...settings, standbyMode: v });
+                }}
+                trackColor={{ false: colors.border, true: "#EF4444" }}
+                thumbColor="#fff"
+              />
+            }
+          />
+        </View>
+
+        {/* Voz */}
+        <Text style={[styles.sectionHeader, { color: colors.muted }]}>VOZ DA ALAJU</Text>
+        <View style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Pressable
+            style={[styles.navRow, { borderBottomColor: 'transparent' }]}
+            onPress={() => router.push('/voice-selector' as any)}
+          >
+            <View style={[styles.settingIcon, { backgroundColor: '#8B5CF622' }]}>
+              <IconSymbol name="waveform" size={18} color="#8B5CF6" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.navLabel, { color: colors.foreground }]}>Voz da Alaju</Text>
+              <Text style={[styles.settingSub, { color: colors.muted }]}>{settings.selectedVoiceName || 'Jessica'}</Text>
+            </View>
+            <IconSymbol name="chevron.right" size={18} color={colors.muted} />
+          </Pressable>
         </View>
 
         {/* Family */}

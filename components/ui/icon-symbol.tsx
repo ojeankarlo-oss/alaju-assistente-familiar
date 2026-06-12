@@ -40,6 +40,7 @@ const MAPPING = {
   "square": "check-box-outline-blank",
 
   // Assistant / Voice
+  "play.fill": "play-arrow",
   "speaker.wave.2.fill": "volume-up",
   "mic.fill": "mic",
   "mic": "mic-none",

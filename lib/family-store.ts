@@ -223,15 +223,19 @@ export async function clearChatHistory(): Promise<void> {
 
 export async function getSettings(): Promise<AssistantSettings> {
   const raw = await AsyncStorage.getItem(KEYS.SETTINGS);
-  return raw
-    ? JSON.parse(raw)
-    : {
-        telegramBotToken: "",
-        telegramChatId: "",
-        voiceEnabled: true,
-        notificationsEnabled: true,
-        activeMemberId: "",
-      };
+  const defaults: AssistantSettings = {
+    telegramBotToken: "",
+    telegramChatId: "",
+    voiceEnabled: true,
+    notificationsEnabled: true,
+    activeMemberId: "",
+    standbyMode: false,
+    selectedVoiceId: "cgSgspJ2msm6clMCkdW9", // Jessica (default)
+    selectedVoiceName: "Jessica",
+  };
+  if (!raw) return defaults;
+  // Merge para garantir que novos campos tenham defaults em instalações antigas
+  return { ...defaults, ...JSON.parse(raw) };
 }
 
 export async function saveSettings(settings: AssistantSettings): Promise<void> {

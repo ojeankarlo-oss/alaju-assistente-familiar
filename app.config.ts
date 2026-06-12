@@ -87,6 +87,12 @@ const config: ExpoConfig = {
   plugins: [
     "expo-router",
     [
+      "expo-image-picker",
+      {
+        "photosPermission": "Permitir que $(PRODUCT_NAME) acesse suas fotos para definir a foto de perfil dos membros da família."
+      }
+    ],
+    [
       "expo-speech-recognition",
       {
         "microphonePermission": "Permitir que a Alaju acesse seu microfone para reconhecer sua voz.",

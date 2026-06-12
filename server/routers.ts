@@ -11,13 +11,15 @@ import { ENV } from "./_core/env";
 const ELEVENLABS_VOICE_ID = "cgSgspJ2msm6clMCkdW9";
 const ELEVENLABS_MODEL_ID = "eleven_multilingual_v2";
 
-async function generateElevenLabsSpeech(text: string): Promise<string | null> {
+async function generateElevenLabsSpeech(text: string, voiceId?: string): Promise<string | null> {
   const apiKey = ENV.elevenLabsApiKey;
   if (!apiKey) return null;
 
+  const selectedVoiceId = voiceId || ELEVENLABS_VOICE_ID;
+
   try {
     const res = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}?output_format=mp3_44100_128`,
+      `https://api.elevenlabs.io/v1/text-to-speech/${selectedVoiceId}?output_format=mp3_44100_128`,
       {
         method: "POST",
         headers: {
@@ -200,10 +202,46 @@ ${input.context ? `\nContexto familiar: ${input.context}` : ""}`;
   tts: router({
     // Gerar áudio via ElevenLabs TTS — retorna base64 do MP3
     speak: publicProcedure
-      .input(z.object({ text: z.string().min(1).max(1000) }))
+      .input(z.object({ text: z.string().min(1).max(1000), voiceId: z.string().optional() }))
       .mutation(async ({ input }) => {
-        const base64 = await generateElevenLabsSpeech(input.text);
+        const base64 = await generateElevenLabsSpeech(input.text, input.voiceId);
         return { base64, available: base64 !== null };
+      }),
+
+    // Listar vozes femininas em português disponíveis no ElevenLabs
+    listVoices: publicProcedure
+      .query(async () => {
+        const apiKey = ENV.elevenLabsApiKey;
+        if (!apiKey) return { voices: [], available: false };
+
+        try {
+          const res = await fetch("https://api.elevenlabs.io/v1/voices", {
+            headers: { "xi-api-key": apiKey },
+          });
+          if (!res.ok) return { voices: [], available: false };
+
+          const data = await res.json() as { voices: Array<{ voice_id: string; name: string; labels?: Record<string, string>; preview_url?: string }> };
+
+          // Filtrar vozes femininas ou multilinguais adequadas para pt-BR
+          const RECOMMENDED = [
+            { voice_id: "cgSgspJ2msm6clMCkdW9", name: "Jessica", description: "Jovem, calorosa e expressiva" },
+            { voice_id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah", description: "Calma, clara e natural" },
+            { voice_id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte", description: "Sofisticada e articulada" },
+            { voice_id: "pFZP5JQG7iQjIQuC4Bku", name: "Lily", description: "Amigável e energética" },
+            { voice_id: "jBpfuIE2acCO8z3wKNLl", name: "Gigi", description: "Animada e expressiva" },
+          ];
+
+          // Verificar quais vozes recomendadas existem na conta
+          const availableIds = new Set(data.voices.map((v) => v.voice_id));
+          const voices = RECOMMENDED.map((v) => ({
+            ...v,
+            available: availableIds.has(v.voice_id),
+          }));
+
+          return { voices, available: true };
+        } catch {
+          return { voices: [], available: false };
+        }
       }),
   }),
 

@@ -5,6 +5,7 @@ export interface FamilyMember {
   name: string;
   role: "adult" | "child" | "pai" | "mãe" | "filho" | "filha" | "avô" | "avó" | "outro";
   avatar?: string;
+  photoUri?: string;  // URI local da foto de perfil do membro
   age?: number;
   isActive?: boolean;
   // Calibração de voz
@@ -89,4 +90,7 @@ export interface AssistantSettings {
   voiceEnabled: boolean;
   notificationsEnabled: boolean;
   activeMemberId: string;
+  standbyMode: boolean;        // Modo plantão: escuta contínua pela wake word
+  selectedVoiceId: string;    // ID da voz ElevenLabs selecionada
+  selectedVoiceName: string;  // Nome amigável da voz selecionada
 }

@@ -18,6 +18,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { VoiceButton } from "@/components/voice-button";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useVoiceAssistant } from "@/hooks/use-voice-assistant";
+import { useStandbyMode } from "@/hooks/use-standby-mode";
 import { useColors } from "@/hooks/use-colors";
 import {
   addChatMessage,
@@ -41,7 +42,7 @@ const QUICK_ACTIONS = [
   { id: "study", icon: "book.fill" as const, label: "Estudos", color: "#8B5CF6", tab: "/study" },
 ];
 
-function ChatBubble({ msg, memberName }: { msg: ChatMessage; memberName?: string }) {
+function ChatBubble({ msg, memberName, memberPhotoUri }: { msg: ChatMessage; memberName?: string; memberPhotoUri?: string }) {
   const colors = useColors();
   const isUser = msg.role === "user";
   return (
@@ -51,6 +52,9 @@ function ChatBubble({ msg, memberName }: { msg: ChatMessage; memberName?: string
           source={{ uri: "https://d2xsxph8kpxj0f.cloudfront.net/310419663030092336/Dg9rCS6mqHJnEdKLTNr2hB/alaju-avatar-cmDpNksKLQqCob9bJ3No9k.png" }}
           style={styles.botAvatar}
         />
+      )}
+      {isUser && memberPhotoUri && (
+        <Image source={{ uri: memberPhotoUri }} style={styles.userAvatar} />
       )}
       <View
         style={[
@@ -84,9 +88,18 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [activeMember, setActiveMember] = useState<FamilyMember | null>(null);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [standbyMode, setStandbyMode] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
   const chatMutation = trpc.assistant.chat.useMutation();
+
+  // Modo plantão: escuta contínua pela wake word
+  useStandbyMode(
+    useCallback((command: string) => {
+      if (command.trim()) sendMessageRef.current?.(command.trim());
+    }, []),
+    standbyMode && Platform.OS !== "web"
+  );
 
   // Hook de assistente por voz — referência estável via ref
   const sendMessageRef = useRef<(text: string) => void>(null as any);
@@ -107,6 +120,7 @@ export default function HomeScreen() {
 
       const settings = await getSettings();
       setVoiceEnabled(settings.voiceEnabled);
+      setStandbyMode(settings.standbyMode ?? false);
 
       // Load recent chat history
       const history = await getChatHistory();
@@ -343,7 +357,7 @@ export default function HomeScreen() {
           data={messages}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <ChatBubble msg={item} memberName={activeMember?.name} />
+            <ChatBubble msg={item} memberName={activeMember?.name} memberPhotoUri={activeMember?.photoUri} />
           )}
           contentContainerStyle={styles.chatContent}
           showsVerticalScrollIndicator={false}
@@ -491,6 +505,14 @@ const styles = StyleSheet.create({
     alignSelf: "flex-end",
     borderWidth: 1,
     borderColor: "#22D3EE",
+  },
+  userAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignSelf: "flex-end",
+    borderWidth: 1,
+    borderColor: "#1A3A5C",
   },
   bubble: {
     maxWidth: "78%",
