@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Platform } from "react-native";
-import {
-  ExpoSpeechRecognitionModule,
-  useSpeechRecognitionEvent,
-} from "expo-speech-recognition";
+import { Platform, NativeModules } from "react-native";
 import { speakNatural, stopSpeaking } from "@/lib/voice-utils";
 import { trpc } from "@/lib/trpc";
 
@@ -42,6 +38,42 @@ function containsWakeWord(text: string): boolean {
   return WAKE_WORDS.some((w) => lower.includes(w));
 }
 
+/** Verifica se o módulo nativo expo-speech-recognition está disponível neste APK */
+function isSpeechRecognitionAvailable(): boolean {
+  if (Platform.OS === "web") return false;
+  try {
+    return !!(
+      NativeModules.ExpoSpeechRecognition ||
+      NativeModules.RNExpoSpeechRecognition
+    );
+  } catch {
+    return false;
+  }
+}
+
+// Cache do módulo carregado
+let cachedSpeechModule: any = null;
+let moduleLoadAttempted = false;
+
+async function getSpeechModule(): Promise<any | null> {
+  if (moduleLoadAttempted) return cachedSpeechModule;
+  moduleLoadAttempted = true;
+
+  if (!isSpeechRecognitionAvailable()) {
+    console.warn("[Voice] expo-speech-recognition não disponível neste APK. Compile um novo APK para usar reconhecimento de voz.");
+    return null;
+  }
+
+  try {
+    const mod = await import("expo-speech-recognition");
+    cachedSpeechModule = mod.ExpoSpeechRecognitionModule;
+    return cachedSpeechModule;
+  } catch (err) {
+    console.warn("[Voice] Falha ao carregar expo-speech-recognition:", err);
+    return null;
+  }
+}
+
 export function useVoiceAssistant(onTranscript?: (text: string) => void) {
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [transcript, setTranscript] = useState("");
@@ -50,102 +82,115 @@ export function useVoiceAssistant(onTranscript?: (text: string) => void) {
   const [wakeWordDetected, setWakeWordDetected] = useState(false);
   const isListeningRef = useRef(false);
   const finalTranscriptRef = useRef("");
+  const listenersRef = useRef<any[]>([]);
+  const speechModuleRef = useRef<any>(null);
 
-  const chatMutation = trpc.assistant.chat.useMutation();
+  // Carregar módulo ao montar (lazy, sem bloquear render)
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    getSpeechModule().then((mod) => {
+      speechModuleRef.current = mod;
+      if (!mod) return;
 
-  // ── Eventos do reconhecimento de voz ──────────────────────────────────────
+      // Registrar listeners após módulo carregado
+      const resultListener = mod.addListener("result", (event: any) => {
+        const results = event.results;
+        if (!results || results.length === 0) return;
 
-  // Resultado parcial (em tempo real enquanto fala)
-  useSpeechRecognitionEvent("result", (event) => {
-    const results = event.results;
-    if (!results || results.length === 0) return;
+        const last = results[results.length - 1];
+        const text = last?.transcript ?? "";
 
-    const last = results[results.length - 1];
-    const text = last?.transcript ?? "";
-
-    if (event.isFinal || last?.confidence > 0) {
-      finalTranscriptRef.current = text;
-      setTranscript(text);
-      setInterimTranscript("");
-    } else {
-      setInterimTranscript(text);
-    }
-  });
-
-  // Reconhecimento encerrado — processar resultado
-  useSpeechRecognitionEvent("end", () => {
-    if (!isListeningRef.current) return;
-    isListeningRef.current = false;
-
-    const text = finalTranscriptRef.current.trim();
-    finalTranscriptRef.current = "";
-    setInterimTranscript("");
-
-    if (!text) {
-      setVoiceState("idle");
-      return;
-    }
-
-    // Verificar wake word
-    if (containsWakeWord(text)) {
-      setWakeWordDetected(true);
-      setVoiceState("speaking");
-
-      // Responder com voz natural feminina
-      const response = getWakeResponse();
-      speakNatural(response, {
-        onStart: () => setVoiceState("speaking"),
-        onDone: () => {
-          setWakeWordDetected(false);
-          setVoiceState("idle");
-        },
-        onStopped: () => {
-          setWakeWordDetected(false);
-          setVoiceState("idle");
-        },
-        onError: () => {
-          setWakeWordDetected(false);
-          setVoiceState("idle");
-        },
+        if (event.isFinal || last?.confidence > 0) {
+          finalTranscriptRef.current = text;
+          setTranscript(text);
+          setInterimTranscript("");
+        } else {
+          setInterimTranscript(text);
+        }
       });
 
-      // Passa o texto para o chat processar contexto (sem a wake word)
-      const commandText = text
-        .toLowerCase()
-        .replace(/^(oi|olá|ola|hey|ei)\s+alaju\s*/i, "")
-        .trim();
-      if (commandText) {
-        onTranscript?.(commandText);
+      const endListener = mod.addListener("end", () => {
+        if (!isListeningRef.current) return;
+        isListeningRef.current = false;
+
+        const text = finalTranscriptRef.current.trim();
+        finalTranscriptRef.current = "";
+        setInterimTranscript("");
+
+        if (!text) {
+          setVoiceState("idle");
+          return;
+        }
+
+        if (containsWakeWord(text)) {
+          setWakeWordDetected(true);
+          setVoiceState("speaking");
+
+          const response = getWakeResponse();
+          speakNatural(response, {
+            onStart: () => setVoiceState("speaking"),
+            onDone: () => {
+              setWakeWordDetected(false);
+              setVoiceState("idle");
+            },
+            onStopped: () => {
+              setWakeWordDetected(false);
+              setVoiceState("idle");
+            },
+            onError: () => {
+              setWakeWordDetected(false);
+              setVoiceState("idle");
+            },
+          });
+
+          const commandText = text
+            .toLowerCase()
+            .replace(/^(oi|olá|ola|hey|ei)\s+alaju\s*/i, "")
+            .trim();
+          if (commandText) {
+            onTranscript?.(commandText);
+          }
+        } else {
+          setVoiceState("processing");
+          onTranscript?.(text);
+          setVoiceState("idle");
+        }
+      });
+
+      const errorListener = mod.addListener("error", (event: any) => {
+        isListeningRef.current = false;
+        const code = event.error;
+
+        if (code === "no-speech") {
+          setErrorMsg("Não ouvi nada. Tente novamente.");
+        } else if (code === "not-allowed") {
+          setErrorMsg("Permissão de microfone negada.");
+        } else if (code === "network") {
+          setErrorMsg("Sem conexão. Verifique a internet.");
+        } else {
+          setErrorMsg("Não consegui entender. Tente novamente.");
+        }
+
+        setVoiceState("error");
+        setTimeout(() => {
+          setVoiceState("idle");
+          setErrorMsg("");
+        }, 3000);
+      });
+
+      listenersRef.current = [resultListener, endListener, errorListener];
+    });
+
+    return () => {
+      listenersRef.current.forEach((l) => { try { l?.remove?.(); } catch { /* ignora */ } });
+      listenersRef.current = [];
+      if (isListeningRef.current && speechModuleRef.current) {
+        try { speechModuleRef.current.stop(); } catch { /* ignora */ }
       }
-    } else {
-      // Comando direto — passa para o chat
-      setVoiceState("processing");
-      onTranscript?.(text);
-      setVoiceState("idle");
-    }
-  });
-
-  // Erros
-  useSpeechRecognitionEvent("error", (event) => {
-    isListeningRef.current = false;
-    const code = event.error;
-
-    if (code === "no-speech") {
-      setErrorMsg("Não ouvi nada. Tente novamente.");
-    } else if (code === "not-allowed") {
-      setErrorMsg("Permissão de microfone negada.");
-    } else if (code === "network") {
-      setErrorMsg("Sem conexão. Verifique a internet.");
-    } else {
-      setErrorMsg("Não consegui entender. Tente novamente.");
-    }
-
-    setVoiceState("error");
-    setTimeout(() => {
-      setVoiceState("idle");
-      setErrorMsg("");
-    }, 3000);
-  });
+      stopSpeaking().catch(() => {});
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Síntese de voz ────────────────────────────────────────────────────────
 
@@ -184,9 +229,16 @@ export function useVoiceAssistant(onTranscript?: (text: string) => void) {
       return;
     }
 
+    const mod = speechModuleRef.current ?? await getSpeechModule();
+    if (!mod) {
+      setErrorMsg("Reconhecimento de voz não disponível. Instale a versão mais recente do app.");
+      setVoiceState("error");
+      setTimeout(() => { setVoiceState("idle"); setErrorMsg(""); }, 4000);
+      return;
+    }
+
     try {
-      // Solicitar permissão
-      const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      const result = await mod.requestPermissionsAsync();
       if (!result.granted) {
         setErrorMsg("Permissão de microfone negada.");
         setVoiceState("error");
@@ -202,7 +254,7 @@ export function useVoiceAssistant(onTranscript?: (text: string) => void) {
       isListeningRef.current = true;
       setVoiceState("listening");
 
-      ExpoSpeechRecognitionModule.start({
+      mod.start({
         lang: "pt-BR",
         interimResults: true,
         maxAlternatives: 1,
@@ -221,7 +273,7 @@ export function useVoiceAssistant(onTranscript?: (text: string) => void) {
 
   const stopListening = useCallback(() => {
     if (!isListeningRef.current) return;
-    ExpoSpeechRecognitionModule.stop();
+    try { speechModuleRef.current?.stop?.(); } catch { /* ignora */ }
   }, []);
 
   const toggleListening = useCallback(() => {
@@ -231,16 +283,6 @@ export function useVoiceAssistant(onTranscript?: (text: string) => void) {
       startListening();
     }
   }, [voiceState, startListening, stopListening]);
-
-  // Cleanup ao desmontar
-  useEffect(() => {
-    return () => {
-      if (isListeningRef.current) {
-        ExpoSpeechRecognitionModule.stop();
-      }
-      stopSpeaking().catch(() => {});
-    };
-  }, []);
 
   return {
     voiceState,

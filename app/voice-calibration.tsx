@@ -9,10 +9,19 @@ import {
   Text,
   View,
 } from "react-native";
-import {
-  ExpoSpeechRecognitionModule,
-  useSpeechRecognitionEvent,
-} from "expo-speech-recognition";
+import { NativeModules } from "react-native";
+
+// Guard: carrega expo-speech-recognition dinamicamente para compatibilidade com APKs antigos
+let _speechMod: any = null;
+async function getSpeechMod() {
+  if (_speechMod) return _speechMod;
+  try {
+    if (!NativeModules.ExpoSpeechRecognition && !NativeModules.RNExpoSpeechRecognition) return null;
+    const m = await import("expo-speech-recognition");
+    _speechMod = m.ExpoSpeechRecognitionModule;
+    return _speechMod;
+  } catch { return null; }
+}
 import { speakNatural, stopSpeaking } from "@/lib/voice-utils";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
@@ -88,53 +97,70 @@ export default function VoiceCalibrationScreen() {
     })();
   }, []);
 
-  // Evento de resultado do reconhecimento
-  useSpeechRecognitionEvent("result", (event) => {
-    const results = event.results;
-    if (!results || results.length === 0) return;
-    const last = results[results.length - 1];
-    const text = last?.transcript ?? "";
-    if (text) setLastHeard(text);
-  });
+  const speechListenersRef = useRef<any[]>([]);
+  // Usar ref para evitar referência circular com finishCalibration
+  const isListeningRef2 = useRef(isListening);
+  const lastHeardRef = useRef(lastHeard);
+  const currentPhraseIdxRef = useRef(currentPhraseIdx);
+  const finishCalibrationRef = useRef<((phrases: string[]) => void) | null>(null);
 
-  // Quando o reconhecimento termina, avança para a próxima frase
-  useSpeechRecognitionEvent("end", () => {
-    if (!isListening) return;
-    setIsListening(false);
+  useEffect(() => { isListeningRef2.current = isListening; }, [isListening]);
+  useEffect(() => { lastHeardRef.current = lastHeard; }, [lastHeard]);
+  useEffect(() => { currentPhraseIdxRef.current = currentPhraseIdx; }, [currentPhraseIdx]);
 
-    const heard = lastHeard.trim();
-    if (heard) {
-      const newCaptured = [...capturedRef.current, heard];
-      capturedRef.current = newCaptured;
-      setCapturedPhrases(newCaptured);
-    }
-
-    const nextIdx = currentPhraseIdx + 1;
-    if (nextIdx >= CALIBRATION_PHRASES.length) {
-      // Calibração completa
-      finishCalibration(capturedRef.current);
-    } else {
-      setCurrentPhraseIdx(nextIdx);
-      setLastHeard("");
-      // Instrui a próxima frase
-      setTimeout(() => {
-        speakNatural(`Agora diga: ${CALIBRATION_PHRASES[nextIdx]}`);
-      }, 800);
-    }
-  });
-
-  useSpeechRecognitionEvent("error", () => {
-    setIsListening(false);
-    // Tenta novamente a mesma frase
-    setTimeout(() => {
-      speakNatural("Não ouvi direito. Tente novamente.");
-    }, 500);
-  });
+  // Registrar listeners de voz dinamicamente (uma vez)
+  useEffect(() => {
+    let mounted = true;
+    getSpeechMod().then((mod) => {
+      if (!mod || !mounted) return;
+      const r = mod.addListener("result", (event: any) => {
+        const results = event.results;
+        if (!results || results.length === 0) return;
+        const last = results[results.length - 1];
+        const text = last?.transcript ?? "";
+        if (text) setLastHeard(text);
+      });
+      const e = mod.addListener("end", () => {
+        if (!isListeningRef2.current) return;
+        setIsListening(false);
+        const heard = lastHeardRef.current.trim();
+        if (heard) {
+          const newCaptured = [...capturedRef.current, heard];
+          capturedRef.current = newCaptured;
+          setCapturedPhrases(newCaptured);
+        }
+        const nextIdx = currentPhraseIdxRef.current + 1;
+        if (nextIdx >= CALIBRATION_PHRASES.length) {
+          finishCalibrationRef.current?.(capturedRef.current);
+        } else {
+          setCurrentPhraseIdx(nextIdx);
+          setLastHeard("");
+          setTimeout(() => { speakNatural(`Agora diga: ${CALIBRATION_PHRASES[nextIdx]}`); }, 800);
+        }
+      });
+      const er = mod.addListener("error", () => {
+        setIsListening(false);
+        setTimeout(() => { speakNatural("Não ouvi direito. Tente novamente."); }, 500);
+      });
+      speechListenersRef.current = [r, e, er];
+    });
+    return () => {
+      mounted = false;
+      speechListenersRef.current.forEach((l) => { try { l?.remove?.(); } catch {} });
+      speechListenersRef.current = [];
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const startCalibration = useCallback(async () => {
     if (!selectedMember) return;
 
-    const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    const mod = await getSpeechMod();
+    if (!mod) {
+      Alert.alert("Não disponível", "Reconhecimento de voz não disponível neste APK. Instale a versão mais recente.");
+      return;
+    }
+    const result = await mod.requestPermissionsAsync();
     if (!result.granted) {
       Alert.alert("Permissão necessária", "Preciso de acesso ao microfone para calibrar sua voz.");
       return;
@@ -156,10 +182,12 @@ export default function VoiceCalibrationScreen() {
     );
   }, [selectedMember]);
 
-  const listenPhrase = useCallback(() => {
+  const listenPhrase = useCallback(async () => {
     setIsListening(true);
     setLastHeard("");
-    ExpoSpeechRecognitionModule.start({
+    const mod = await getSpeechMod();
+    if (!mod) return;
+    mod.start({
       lang: "pt-BR",
       interimResults: true,
       maxAlternatives: 1,
@@ -171,6 +199,7 @@ export default function VoiceCalibrationScreen() {
 
   const finishCalibration = useCallback(
     async (phrases: string[]) => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       if (!selectedMember) return;
 
       const signature = extractVoiceSignature(phrases);
@@ -192,6 +221,11 @@ export default function VoiceCalibrationScreen() {
     },
     [selectedMember]
   );
+
+  // Manter ref atualizado para uso dentro dos listeners
+  useEffect(() => {
+    finishCalibrationRef.current = finishCalibration;
+  }, [finishCalibration]);
 
   const renderSelectStep = () => (
     <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -341,7 +375,7 @@ export default function VoiceCalibrationScreen() {
       <Pressable
         style={[styles.btnSecondary, { borderColor: colors.border, marginTop: 24 }]}
         onPress={() => {
-          ExpoSpeechRecognitionModule.stop();
+          getSpeechMod().then((mod) => { try { mod?.stop?.(); } catch {} });
           stopSpeaking();
           setStep("select");
           setCurrentPhraseIdx(0);
