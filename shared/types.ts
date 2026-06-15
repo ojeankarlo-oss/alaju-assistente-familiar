@@ -1,5 +1,33 @@
 // Shared types for Assistente Familiar Mobile
 
+export type Gender = "female" | "male" | "other" | "prefer_not_to_say";
+
+export type CyclePhase =
+  | "menstruation"   // Menstruação (dias 1-5)
+  | "follicular"     // Folicular (dias 6-13)
+  | "ovulation"      // Ovulação (dias 12-16)
+  | "luteal"         // Lútea (dias 17-28)
+  | "unknown";
+
+export interface CycleEntry {
+  id: string;
+  memberId: string;
+  startDate: string;   // ISO date string (YYYY-MM-DD)
+  endDate?: string;    // ISO date string
+  cycleLength?: number; // duração em dias
+  notes?: string;
+  symptoms?: string[];  // cólica, inchaço, dor de cabeça, etc.
+  mood?: "great" | "good" | "ok" | "bad" | "irritable" | "anxious";
+  flow?: "light" | "medium" | "heavy";
+}
+
+export interface MenstrualProfile {
+  averageCycleLength: number;   // padrão: 28
+  averagePeriodLength: number;  // padrão: 5
+  lastPeriodStart?: string;     // ISO date string
+  trackingEnabled: boolean;
+}
+
 export interface FamilyMember {
   id: string;
   name: string;
@@ -7,6 +35,8 @@ export interface FamilyMember {
   avatar?: string;
   photoUri?: string;  // URI local da foto de perfil do membro
   age?: number;
+  gender?: Gender;
+  menstrualProfile?: MenstrualProfile;
   isActive?: boolean;
   // Calibração de voz
   voiceSignature?: string;

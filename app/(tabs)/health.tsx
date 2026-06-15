@@ -13,6 +13,7 @@ import * as Haptics from "expo-haptics";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
+import { router } from "expo-router";
 import { addHealthEntry, getHealthEntries, getFamily } from "@/lib/family-store";
 import { trpc } from "@/lib/trpc";
 import type { HealthEntry, FamilyMember } from "@/shared/types";
@@ -158,6 +159,33 @@ export default function HealthScreen() {
             {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}
           </Text>
         </View>
+
+        {/* Banner Saúde Feminina */}
+        {activeMember?.gender === "female" && (
+          <Pressable
+            style={({ pressed }) => [{
+              margin: 16,
+              marginBottom: 0,
+              borderRadius: 16,
+              padding: 16,
+              backgroundColor: "#E879A018",
+              borderWidth: 1,
+              borderColor: "#E879A044",
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 12,
+              opacity: pressed ? 0.85 : 1,
+            }]}
+            onPress={() => router.push("/feminine-health" as any)}
+          >
+            <Text style={{ fontSize: 28 }}>🌸</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 15, fontWeight: "700", color: "#E879A0" }}>Saúde Feminina</Text>
+              <Text style={{ fontSize: 13, color: "#E879A0", opacity: 0.8, marginTop: 2 }}>Ciclo menstrual, fases e dicas</Text>
+            </View>
+            <IconSymbol name="chevron.right" size={18} color="#E879A0" />
+          </Pressable>
+        )}
 
         {/* Weekly summary */}
         <View style={styles.metricsRow}>

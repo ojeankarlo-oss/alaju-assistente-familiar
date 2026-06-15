@@ -84,6 +84,8 @@ export const appRouter = router({
           memberName: z.string().optional(),
           memberRole: z.enum(["adult", "child", "pai", "mãe", "filho", "filha", "avô", "avó", "outro"]).optional(),
           context: z.string().optional(), // JSON string with family context
+          gender: z.enum(["male", "female"]).optional(),
+          cycleContext: z.string().optional(), // Current cycle phase info for female members
         })
       )
       .mutation(async ({ input }) => {
@@ -106,7 +108,8 @@ Quando o usuário pedir para criar um lembrete, liste as informações necessár
 Quando pedir para adicionar à lista de compras, confirme os itens.
 Quando pedir para chamar corrida, pergunte o destino se não foi informado.
 Seja direto, útil e amigável. Responda sempre em português brasileiro.
-${input.context ? `\nContexto familiar: ${input.context}` : ""}`;
+${input.context ? `\nContexto familiar: ${input.context}` : ""}
+${input.gender === "female" && input.cycleContext ? `\nContexto do ciclo menstrual de ${name}: ${input.cycleContext}. Use esse contexto para dar dicas mais personalizadas sobre bem-estar, humor, alimentação e autocuidado quando relevante. Seja empática e acolhedora.` : ""}`;
 
         const response = await invokeLLM({
           messages: [

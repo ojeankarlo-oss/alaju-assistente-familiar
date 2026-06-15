@@ -153,6 +153,7 @@ export default function FamilyScreen() {
   const [name, setName] = useState("");
   const [role, setRole] = useState<"adult" | "child">("adult");
   const [age, setAge] = useState("");
+  const [gender, setGender] = useState<import("@/shared/types").Gender | undefined>(undefined);
 
   const load = useCallback(async () => {
     const p = (await getFamily()) || (await createDefaultFamily());
@@ -173,11 +174,13 @@ export default function FamilyScreen() {
       name: name.trim(),
       role,
       age: age ? Number(age) : undefined,
+      gender,
       isActive: false,
     });
     setName("");
     setAge("");
     setRole("adult");
+    setGender(undefined);
     setShowModal(false);
     load();
   }, [name, role, age, load]);
@@ -326,6 +329,31 @@ export default function FamilyScreen() {
                   />
                   <Text style={[styles.roleOptionText, { color: role === r ? "#fff" : ROLE_COLORS[r] }]}>
                     {ROLE_LABELS[r]}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Text style={[styles.fieldLabel, { color: colors.muted }]}>Gênero</Text>
+            <View style={styles.roleRow}>
+              {([
+                { value: "female", label: "Feminino", color: "#E879A0" },
+                { value: "male", label: "Masculino", color: "#1A3A5C" },
+                { value: "other", label: "Outro", color: "#6B7280" },
+              ] as const).map((g) => (
+                <Pressable
+                  key={g.value}
+                  style={[
+                    styles.roleOption,
+                    {
+                      backgroundColor: gender === g.value ? g.color : g.color + "22",
+                      borderColor: g.color,
+                    },
+                  ]}
+                  onPress={() => setGender(gender === g.value ? undefined : g.value)}
+                >
+                  <Text style={[styles.roleOptionText, { color: gender === g.value ? "#fff" : g.color }]}>
+                    {g.label}
                   </Text>
                 </Pressable>
               ))}

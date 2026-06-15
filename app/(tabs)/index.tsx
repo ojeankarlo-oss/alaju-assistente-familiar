@@ -202,11 +202,26 @@ export default function HomeScreen() {
           ? await getMemberMemoryContext(activeMember.id)
           : "";
 
+        // Obter contexto do ciclo para membros femininos
+        let cycleContext: string | undefined;
+        if (activeMember?.gender === "female" && activeMember?.id) {
+          try {
+            const { getCycleContextForAlaju } = await import("@/lib/cycle-store");
+            // Usar menstrualProfile do próprio membro se disponível
+            const profile = activeMember.menstrualProfile;
+            if (profile?.trackingEnabled && profile?.lastPeriodStart) {
+              cycleContext = getCycleContextForAlaju(profile, activeMember.name);
+            }
+          } catch { /* sem contexto de ciclo */ }
+        }
+
         const result = await chatMutation.mutateAsync({
           message: text.trim(),
           memberName: activeMember?.name,
           memberRole: activeMember?.role,
           context: memoryContext || undefined,
+          gender: (activeMember?.gender === "male" || activeMember?.gender === "female") ? activeMember.gender : undefined,
+          cycleContext,
         });
 
         // Registrar interação para aprendizado
