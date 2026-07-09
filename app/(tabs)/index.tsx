@@ -218,6 +218,8 @@ export default function HomeScreen() {
         const result = await chatMutation.mutateAsync({
           message: text.trim(),
           memberName: activeMember?.name,
+          memberId: activeMember?.id ?? "default_member",
+          familyId: "alaju_family",
           memberRole: activeMember?.role,
           context: memoryContext || undefined,
           gender: (activeMember?.gender === "male" || activeMember?.gender === "female") ? activeMember.gender : undefined,

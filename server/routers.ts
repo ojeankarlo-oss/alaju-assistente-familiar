@@ -4,6 +4,14 @@ import { invokeLLM } from "./_core/llm";
 import { transcribeAudio, TranscriptionError } from "./_core/voiceTranscription";
 import { storagePut } from "./storage";
 import { ENV } from "./_core/env";
+import {
+  saveChatMessage,
+  getChatHistory,
+  getMemberMemory,
+  extractAndSaveMemory,
+  setMemberEmotion,
+  getFamilyEmotions,
+} from "./supabase";
 
 // ─── ElevenLabs TTS helper ────────────────────────────────────────────────────
 
@@ -73,25 +81,41 @@ async function sendTelegramMessage(botToken: string, chatId: string, text: strin
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 export const appRouter = router({
-  health: publicProcedure.query(() => ({ status: "ok" })),
+  health: publicProcedure.query(() => ({ status: "ok", supabase: !!ENV.supabaseUrl })),
 
   assistant: router({
-    // Process a text command and return an action + response
+    // Chat com memória persistente via Supabase
     chat: publicProcedure
       .input(
         z.object({
           message: z.string().min(1).max(2000),
           memberName: z.string().optional(),
+          memberId: z.string().optional(),       // ID único do membro
+          familyId: z.string().optional(),       // ID único da família
           memberRole: z.enum(["adult", "child", "pai", "mãe", "filho", "filha", "avô", "avó", "outro"]).optional(),
-          context: z.string().optional(), // JSON string with family context
+          context: z.string().optional(),        // JSON string with family context
           gender: z.enum(["male", "female"]).optional(),
-          cycleContext: z.string().optional(), // Current cycle phase info for female members
+          cycleContext: z.string().optional(),   // Current cycle phase info for female members
         })
       )
       .mutation(async ({ input }) => {
         const isChild = input.memberRole === "child";
         const name = input.memberName || "você";
+        const familyId = input.familyId || "default_family";
+        const memberId = input.memberId || input.memberName || "default_member";
 
+        // ── 1. Buscar histórico e memória do Supabase ──
+        const [chatHistory, memories] = await Promise.all([
+          getChatHistory(familyId, memberId, 10),
+          getMemberMemory(familyId, memberId, 20),
+        ]);
+
+        // ── 2. Montar contexto de memória ──
+        const memoryContext = memories.length > 0
+          ? `\nO que você já sabe sobre ${name}:\n${memories.map((m) => `- ${m.fact}`).join("\n")}`
+          : "";
+
+        // ── 3. Montar system prompt ──
         const systemPrompt = isChild
           ? `Você é uma assistente familiar amigável e educativa chamada "Alaju". 
 Você está conversando com uma criança chamada ${name}.
@@ -99,7 +123,7 @@ Seja sempre gentil, paciente e use linguagem simples adequada para crianças.
 Quando ajudar com lições de escola, explique passo a passo e incentive a criança a tentar resolver.
 Nunca dê respostas prontas para exercícios — guie o raciocínio.
 Evite qualquer conteúdo inadequado para crianças.
-Responda sempre em português brasileiro.`
+Responda sempre em português brasileiro.${memoryContext}`
           : `Você é uma assistente familiar inteligente e prestativa chamada "Alaju".
 Você está conversando com ${name}.
 Você pode ajudar com: lembretes, lista de compras, informações sobre saúde e bem-estar, 
@@ -109,11 +133,18 @@ Quando pedir para adicionar à lista de compras, confirme os itens.
 Quando pedir para chamar corrida, pergunte o destino se não foi informado.
 Seja direto, útil e amigável. Responda sempre em português brasileiro.
 ${input.context ? `\nContexto familiar: ${input.context}` : ""}
-${input.gender === "female" && input.cycleContext ? `\nContexto do ciclo menstrual de ${name}: ${input.cycleContext}. Use esse contexto para dar dicas mais personalizadas sobre bem-estar, humor, alimentação e autocuidado quando relevante. Seja empática e acolhedora.` : ""}`;
+${input.gender === "female" && input.cycleContext ? `\nContexto do ciclo menstrual de ${name}: ${input.cycleContext}. Use esse contexto para dar dicas mais personalizadas sobre bem-estar, humor, alimentação e autocuidado quando relevante. Seja empática e acolhedora.` : ""}${memoryContext}`;
+
+        // ── 4. Montar histórico de mensagens para a IA ──
+        const historyMessages = chatHistory.map((h) => ({
+          role: h.role as "user" | "assistant",
+          content: h.content,
+        }));
 
         const response = await invokeLLM({
           messages: [
             { role: "system", content: systemPrompt },
+            ...historyMessages,
             { role: "user", content: input.message },
           ],
         });
@@ -121,7 +152,26 @@ ${input.gender === "female" && input.cycleContext ? `\nContexto do ciclo menstru
         const rawContent = response.choices[0]?.message?.content;
         const text = typeof rawContent === "string" ? rawContent : "Desculpe, não consegui processar sua mensagem.";
 
-        // Detect intent for structured actions
+        // ── 5. Salvar mensagens no Supabase (não bloqueia a resposta) ──
+        Promise.all([
+          saveChatMessage({
+            family_id: familyId,
+            member_id: memberId,
+            member_name: name,
+            role: "user",
+            content: input.message,
+          }),
+          saveChatMessage({
+            family_id: familyId,
+            member_id: memberId,
+            member_name: name,
+            role: "assistant",
+            content: text,
+          }),
+          extractAndSaveMemory(familyId, memberId, name, input.message, text),
+        ]).catch((err) => console.error("[Supabase] Erro ao salvar histórico:", err));
+
+        // ── 6. Detectar intenção para ações estruturadas ──
         const lowerMsg = input.message.toLowerCase();
         let action: string | null = null;
         let actionData: Record<string, string> = {};
@@ -149,7 +199,6 @@ ${input.gender === "female" && input.cycleContext ? `\nContexto do ciclo menstru
           lowerMsg.includes("transporte")
         ) {
           action = "open_ride_app";
-          // Try to extract destination
           const destMatch = input.message.match(/(?:para|até|ir (?:para|ao|à))\s+(.+?)(?:\.|$)/i);
           if (destMatch) actionData.destination = destMatch[1].trim();
         } else if (
@@ -202,6 +251,71 @@ ${input.gender === "female" && input.cycleContext ? `\nContexto do ciclo menstru
       }),
   }),
 
+  // ─── Emoções Familiares (estilo Widgetable) ───────────────────────────────
+  emotions: router({
+    // Definir emoção atual de um membro
+    setEmotion: publicProcedure
+      .input(
+        z.object({
+          familyId: z.string().min(1),
+          memberId: z.string().min(1),
+          memberName: z.string().min(1),
+          emoji: z.string().min(1),
+          mood: z.string().min(1),
+          note: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const ok = await setMemberEmotion({
+          family_id: input.familyId,
+          member_id: input.memberId,
+          member_name: input.memberName,
+          emoji: input.emoji,
+          mood: input.mood,
+          note: input.note,
+        });
+        return { ok };
+      }),
+
+    // Buscar emoções atuais de todos os membros da família
+    getFamilyEmotions: publicProcedure
+      .input(z.object({ familyId: z.string().min(1) }))
+      .query(async ({ input }) => {
+        const emotions = await getFamilyEmotions(input.familyId);
+        return { emotions };
+      }),
+  }),
+
+  // ─── Memória da IA ────────────────────────────────────────────────────────
+  memory: router({
+    // Buscar histórico de conversas de um membro
+    getChatHistory: publicProcedure
+      .input(
+        z.object({
+          familyId: z.string().min(1),
+          memberId: z.string().min(1),
+          limit: z.number().min(1).max(100).optional(),
+        })
+      )
+      .query(async ({ input }) => {
+        const history = await getChatHistory(input.familyId, input.memberId, input.limit ?? 20);
+        return { history };
+      }),
+
+    // Buscar memórias de longo prazo de um membro
+    getMemberMemory: publicProcedure
+      .input(
+        z.object({
+          familyId: z.string().min(1),
+          memberId: z.string().min(1),
+        })
+      )
+      .query(async ({ input }) => {
+        const memories = await getMemberMemory(input.familyId, input.memberId);
+        return { memories };
+      }),
+  }),
+
   tts: router({
     // Gerar áudio via ElevenLabs TTS — retorna base64 do MP3
     speak: publicProcedure
@@ -225,7 +339,6 @@ ${input.gender === "female" && input.cycleContext ? `\nContexto do ciclo menstru
 
           const data = await res.json() as { voices: Array<{ voice_id: string; name: string; labels?: Record<string, string>; preview_url?: string }> };
 
-          // Filtrar vozes femininas ou multilinguais adequadas para pt-BR
           const RECOMMENDED = [
             { voice_id: "cgSgspJ2msm6clMCkdW9", name: "Jessica", description: "Jovem, calorosa e expressiva" },
             { voice_id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah", description: "Calma, clara e natural" },
@@ -234,7 +347,6 @@ ${input.gender === "female" && input.cycleContext ? `\nContexto do ciclo menstru
             { voice_id: "jBpfuIE2acCO8z3wKNLl", name: "Gigi", description: "Animada e expressiva" },
           ];
 
-          // Verificar quais vozes recomendadas existem na conta
           const availableIds = new Set(data.voices.map((v) => v.voice_id));
           const voices = RECOMMENDED.map((v) => ({
             ...v,
