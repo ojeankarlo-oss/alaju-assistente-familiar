@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useFocusEffect } from "expo-router";
 import {
   Alert,
   FlatList,
@@ -94,7 +95,7 @@ export default function HomeScreen() {
   const chatMutation = trpc.assistant.chat.useMutation();
 
   // Modo plantão: escuta contínua pela wake word
-  useStandbyMode(
+  const { standbyState } = useStandbyMode(
     useCallback((command: string) => {
       if (command.trim()) sendMessageRef.current?.(command.trim());
     }, []),
@@ -127,6 +128,16 @@ export default function HomeScreen() {
       setMessages(history.slice(-30));
     })();
   }, []);
+
+  // Recarregar configurações ao retornar para a tela (ex: após mudar modo plantão nas configurações)
+  useFocusEffect(
+    useCallback(() => {
+      getSettings().then((s) => {
+        setVoiceEnabled(s.voiceEnabled);
+        setStandbyMode(s.standbyMode ?? false);
+      });
+    }, [])
+  );
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
@@ -294,6 +305,21 @@ export default function HomeScreen() {
           </View>
         </View>
         <View style={styles.headerRight}>
+          {/* Indicador de modo plantão */}
+          {standbyMode && (
+            <View style={[
+              styles.standbyIndicator,
+              standbyState === "activated" && { backgroundColor: "#22C55E" },
+              standbyState === "standby" && { backgroundColor: "#EF4444" },
+              standbyState === "restarting" && { backgroundColor: "#F59E0B" },
+            ]}>
+              <Text style={styles.standbyIndicatorText}>
+                {standbyState === "activated" ? "🟢" :
+                 standbyState === "standby" ? "🔴" :
+                 standbyState === "restarting" ? "🟡" : "⏸️"}
+              </Text>
+            </View>
+          )}
           <Pressable
             style={({ pressed }) => [styles.headerBtn, pressed && { opacity: 0.6 }]}
             onPress={() => router.push("/avatar-chat" as any)}
@@ -568,5 +594,17 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
+  },
+  standbyIndicator: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#33333344",
+    marginRight: 2,
+  },
+  standbyIndicatorText: {
+    fontSize: 14,
   },
 });

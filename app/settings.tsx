@@ -195,7 +195,7 @@ export default function SettingsScreen() {
             icon="mic.fill"
             iconColor="#EF4444"
             label="Modo Plantão"
-            sublabel="Alaju ouve continuamente por 'Oi Alaju'"
+            sublabel="Diga 'Alaju' para ativar. Indicador 🔴 = ouvindo"
             right={
               <Switch
                 value={settings.standbyMode}
