@@ -11,6 +11,8 @@ import {
   extractAndSaveMemory,
   setMemberEmotion,
   getFamilyEmotions,
+  addEmotionReaction,
+  getFamilyEmotionsWithReactions,
 } from "./supabase";
 
 // ─── ElevenLabs TTS helper ────────────────────────────────────────────────────
@@ -277,12 +279,34 @@ ${input.gender === "female" && input.cycleContext ? `\nContexto do ciclo menstru
         return { ok };
       }),
 
-    // Buscar emoções atuais de todos os membros da família
+    // Buscar emoções atuais de todos os membros da família (com reações)
     getFamilyEmotions: publicProcedure
       .input(z.object({ familyId: z.string().min(1) }))
       .query(async ({ input }) => {
-        const emotions = await getFamilyEmotions(input.familyId);
+        const emotions = await getFamilyEmotionsWithReactions(input.familyId);
         return { emotions };
+      }),
+
+    // Reagir ao humor de um membro
+    addReaction: publicProcedure
+      .input(
+        z.object({
+          familyId: z.string().min(1),
+          emotionId: z.string().min(1),
+          reactorMemberId: z.string().min(1),
+          reactorMemberName: z.string().min(1),
+          reaction: z.string().min(1),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const ok = await addEmotionReaction({
+          family_id: input.familyId,
+          emotion_id: input.emotionId,
+          reactor_member_id: input.reactorMemberId,
+          reactor_member_name: input.reactorMemberName,
+          reaction: input.reaction,
+        });
+        return { ok };
       }),
   }),
 

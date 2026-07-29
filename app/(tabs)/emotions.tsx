@@ -33,13 +33,23 @@ const MOODS = [
   { emoji: "🤔", label: "Pensativo" },
 ];
 
+const REACTIONS = ["❤️", "🤗", "💪", "😢", "🙏", "🎉"];
+
+interface EmotionReaction {
+  reactor_member_id: string;
+  reactor_member_name: string;
+  reaction: string;
+}
+
 interface EmotionEntry {
+  id?: string;
   member_id: string;
   member_name: string;
   emoji: string;
   mood: string;
   note?: string;
   created_at?: string;
+  reactions?: EmotionReaction[];
 }
 
 export default function EmotionsScreen() {
@@ -50,11 +60,13 @@ export default function EmotionsScreen() {
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [reactingTo, setReactingTo] = useState<string | null>(null); // emotionId sendo reagido
 
   const setEmotionMutation = trpc.emotions.setEmotion.useMutation();
+  const addReactionMutation = trpc.emotions.addReaction.useMutation();
   const familyEmotionsQuery = trpc.emotions.getFamilyEmotions.useQuery(
     { familyId: FAMILY_ID },
-    { refetchInterval: 30000 } // Atualizar a cada 30 segundos
+    { refetchInterval: 30000 }
   );
 
   useEffect(() => {
@@ -96,6 +108,28 @@ export default function EmotionsScreen() {
     }
   }, [selectedMood, activeMember, note, setEmotionMutation, familyEmotionsQuery]);
 
+  const handleReaction = useCallback(async (emotion: EmotionEntry, reaction: string) => {
+    if (!activeMember || !emotion.id) return;
+    // Não reagir ao próprio humor
+    if (emotion.member_id === activeMember.id) return;
+
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setReactingTo(null);
+
+    try {
+      await addReactionMutation.mutateAsync({
+        familyId: FAMILY_ID,
+        emotionId: emotion.id,
+        reactorMemberId: activeMember.id,
+        reactorMemberName: activeMember.name,
+        reaction,
+      });
+      familyEmotionsQuery.refetch();
+    } catch (err) {
+      console.error("[Emoções] Erro ao reagir:", err);
+    }
+  }, [activeMember, addReactionMutation, familyEmotionsQuery]);
+
   const formatTime = (isoDate?: string) => {
     if (!isoDate) return "";
     const d = new Date(isoDate);
@@ -107,6 +141,17 @@ export default function EmotionsScreen() {
     const diffH = Math.floor(diffMin / 60);
     if (diffH < 24) return `${diffH}h atrás`;
     return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  };
+
+  // Agrupar reações por emoji
+  const groupReactions = (reactions: EmotionReaction[] = []) => {
+    const map: Record<string, { count: number; names: string[] }> = {};
+    for (const r of reactions) {
+      if (!map[r.reaction]) map[r.reaction] = { count: 0, names: [] };
+      map[r.reaction].count++;
+      map[r.reaction].names.push(r.reactor_member_name);
+    }
+    return map;
   };
 
   return (
@@ -168,6 +213,7 @@ export default function EmotionsScreen() {
                     onChangeText={setNote}
                     maxLength={200}
                     multiline
+                    returnKeyType="done"
                   />
                   <Pressable
                     style={({ pressed }) => [
@@ -216,39 +262,106 @@ export default function EmotionsScreen() {
                 </View>
               ) : (
                 <View style={styles.emotionsList}>
-                  {familyEmotions.map((emotion, idx) => (
-                    <View
-                      key={`${emotion.member_id}-${idx}`}
-                      style={[styles.emotionRow, { borderBottomColor: colors.border }]}
-                    >
-                      <View style={[styles.emotionAvatar, { backgroundColor: "#1A3A5C22" }]}>
-                        <Text style={styles.emotionAvatarText}>
-                          {emotion.member_name.charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
-                      <View style={styles.emotionInfo}>
-                        <View style={styles.emotionTopRow}>
-                          <Text style={[styles.emotionName, { color: colors.foreground }]}>
-                            {emotion.member_name}
-                          </Text>
-                          <Text style={[styles.emotionTime, { color: colors.muted }]}>
-                            {formatTime(emotion.created_at)}
+                  {familyEmotions.map((emotion, idx) => {
+                    const isOwn = emotion.member_id === activeMember?.id;
+                    const grouped = groupReactions(emotion.reactions);
+                    const isShowingReactions = reactingTo === emotion.id;
+
+                    return (
+                      <View
+                        key={`${emotion.member_id}-${idx}`}
+                        style={[styles.emotionRow, { borderBottomColor: colors.border }]}
+                      >
+                        <View style={[styles.emotionAvatar, { backgroundColor: "#1A3A5C22" }]}>
+                          <Text style={styles.emotionAvatarText}>
+                            {emotion.member_name.charAt(0).toUpperCase()}
                           </Text>
                         </View>
-                        <View style={styles.emotionMoodRow}>
-                          <Text style={styles.emotionEmoji}>{emotion.emoji}</Text>
-                          <Text style={[styles.emotionMood, { color: colors.muted }]}>
-                            {emotion.mood}
-                          </Text>
+
+                        <View style={styles.emotionInfo}>
+                          <View style={styles.emotionTopRow}>
+                            <Text style={[styles.emotionName, { color: colors.foreground }]}>
+                              {emotion.member_name}
+                            </Text>
+                            <Text style={[styles.emotionTime, { color: colors.muted }]}>
+                              {formatTime(emotion.created_at)}
+                            </Text>
+                          </View>
+
+                          <View style={styles.emotionMoodRow}>
+                            <Text style={styles.emotionEmoji}>{emotion.emoji}</Text>
+                            <Text style={[styles.emotionMood, { color: colors.muted }]}>
+                              {emotion.mood}
+                            </Text>
+                          </View>
+
+                          {emotion.note ? (
+                            <Text style={[styles.emotionNote, { color: colors.foreground }]}>
+                              "{emotion.note}"
+                            </Text>
+                          ) : null}
+
+                          {/* Reações existentes agrupadas */}
+                          {Object.keys(grouped).length > 0 && (
+                            <View style={styles.reactionsRow}>
+                              {Object.entries(grouped).map(([emoji, { count, names }]) => (
+                                <View
+                                  key={emoji}
+                                  style={[styles.reactionBubble, { backgroundColor: colors.background, borderColor: colors.border }]}
+                                >
+                                  <Text style={styles.reactionBubbleEmoji}>{emoji}</Text>
+                                  <Text style={[styles.reactionBubbleCount, { color: colors.muted }]}>
+                                    {count}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          )}
+
+                          {/* Botão de reagir (apenas para emoções de outros membros) */}
+                          {!isOwn && (
+                            <View>
+                              {isShowingReactions ? (
+                                <View style={styles.reactionPicker}>
+                                  {REACTIONS.map((r) => (
+                                    <Pressable
+                                      key={r}
+                                      style={({ pressed }) => [
+                                        styles.reactionPickerBtn,
+                                        pressed && { transform: [{ scale: 1.2 }] },
+                                      ]}
+                                      onPress={() => handleReaction(emotion, r)}
+                                    >
+                                      <Text style={styles.reactionPickerEmoji}>{r}</Text>
+                                    </Pressable>
+                                  ))}
+                                  <Pressable
+                                    style={({ pressed }) => [pressed && { opacity: 0.6 }]}
+                                    onPress={() => setReactingTo(null)}
+                                  >
+                                    <Text style={[styles.cancelReaction, { color: colors.muted }]}>✕</Text>
+                                  </Pressable>
+                                </View>
+                              ) : (
+                                <Pressable
+                                  style={({ pressed }) => [
+                                    styles.addReactionBtn,
+                                    { borderColor: colors.border },
+                                    pressed && { opacity: 0.7 },
+                                  ]}
+                                  onPress={() => setReactingTo(emotion.id ?? null)}
+                                >
+                                  <Text style={[styles.addReactionText, { color: colors.muted }]}>
+                                    + Reagir
+                                  </Text>
+                                </Pressable>
+                              )}
+                            </View>
+                          )}
                         </View>
-                        {emotion.note ? (
-                          <Text style={[styles.emotionNote, { color: colors.foreground }]}>
-                            "{emotion.note}"
-                          </Text>
-                        ) : null}
                       </View>
-                    </View>
-                  ))}
+                    );
+                  })}
                 </View>
               )}
             </View>
@@ -410,6 +523,59 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontStyle: "italic",
     lineHeight: 18,
+  },
+  reactionsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 4,
+  },
+  reactionBubble: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    gap: 3,
+  },
+  reactionBubbleEmoji: {
+    fontSize: 14,
+  },
+  reactionBubbleCount: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  addReactionBtn: {
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginTop: 4,
+  },
+  addReactionText: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  reactionPicker: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 6,
+    backgroundColor: "transparent",
+    flexWrap: "wrap",
+  },
+  reactionPickerBtn: {
+    padding: 4,
+  },
+  reactionPickerEmoji: {
+    fontSize: 26,
+  },
+  cancelReaction: {
+    fontSize: 16,
+    fontWeight: "700",
+    padding: 4,
   },
   tipCard: {
     borderRadius: 12,

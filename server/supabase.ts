@@ -189,3 +189,57 @@ export async function getFamilyEmotions(familyId: string): Promise<FamilyEmotion
     return [];
   }
 }
+
+// ─── Emotion Reactions (Reações ao Humor) ─────────────────────────────────────
+
+export interface EmotionReaction {
+  id?: string;
+  family_id: string;
+  emotion_id: string;
+  reactor_member_id: string;
+  reactor_member_name: string;
+  reaction: string;
+  created_at?: string;
+}
+
+export async function addEmotionReaction(reaction: EmotionReaction): Promise<boolean> {
+  try {
+    const res = await fetch(supabaseUrl("emotion_reactions"), {
+      method: "POST",
+      headers: getHeaders(true),
+      body: JSON.stringify(reaction),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function getEmotionReactions(emotionId: string): Promise<EmotionReaction[]> {
+  try {
+    const query = `emotion_id=eq.${encodeURIComponent(emotionId)}&order=created_at.asc`;
+    const res = await fetch(supabaseUrl("emotion_reactions", query), {
+      headers: getHeaders(),
+    });
+    if (!res.ok) return [];
+    return await res.json() as EmotionReaction[];
+  } catch {
+    return [];
+  }
+}
+
+export async function getFamilyEmotionsWithReactions(familyId: string): Promise<(FamilyEmotion & { reactions: EmotionReaction[] })[]> {
+  try {
+    const emotions = await getFamilyEmotions(familyId);
+    // Buscar reações para cada emoção em paralelo
+    const withReactions = await Promise.all(
+      emotions.map(async (e) => ({
+        ...e,
+        reactions: e.id ? await getEmotionReactions(e.id) : [],
+      }))
+    );
+    return withReactions;
+  } catch {
+    return [];
+  }
+}
