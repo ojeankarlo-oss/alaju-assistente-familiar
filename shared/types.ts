@@ -114,6 +114,44 @@ export interface ChatMessage {
   memberId?: string;
 }
 
+// ─── Calendar ───────────────────────────────────────────────────────────────
+
+export type EventCategory =
+  | "family"      // Evento da família
+  | "health"      // Saúde / médico
+  | "school"      // Escola / estudos
+  | "birthday"    // Aniversário
+  | "work"        // Trabalho
+  | "other";      // Outro
+
+export type EventReminderTime =
+  | "at_time"     // Na hora do evento
+  | "5min"        // 5 minutos antes
+  | "15min"       // 15 minutos antes
+  | "30min"       // 30 minutos antes
+  | "1h"          // 1 hora antes
+  | "1day"        // 1 dia antes
+  | "2days";      // 2 dias antes
+
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  description?: string;
+  date: string;           // ISO date string (YYYY-MM-DD)
+  time?: string;          // HH:MM (opcional — evento de dia inteiro se ausente)
+  endTime?: string;       // HH:MM (hora de término)
+  category: EventCategory;
+  memberId?: string;      // Membro responsável (null = toda a família)
+  memberIds?: string[];   // Múltiplos membros
+  reminder?: EventReminderTime; // Lembrete automático
+  notificationId?: string;      // ID da notificação agendada
+  color?: string;         // Cor personalizada do evento
+  allDay: boolean;        // Evento de dia inteiro
+  recurring?: "none" | "weekly" | "monthly" | "yearly"; // Recorrência
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface AssistantSettings {
   telegramBotToken: string;
   telegramChatId: string;

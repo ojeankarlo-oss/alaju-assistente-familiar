@@ -31,16 +31,17 @@ import {
   getFamily,
   getSettings,
   getMemberMemoryContext,
+  getUpcomingEvents,
   recordMemberInteraction,
 } from "@/lib/family-store";
 import { trpc } from "@/lib/trpc";
 import type { ChatMessage, FamilyMember } from "@/shared/types";
 
 const QUICK_ACTIONS = [
+  { id: "calendar", icon: "calendar" as const, label: "Agenda", color: "#1A3A5C", tab: "/calendar" },
   { id: "reminder", icon: "bell.fill" as const, label: "Lembrete", color: "#F59E0B", tab: "/reminders" },
   { id: "shopping", icon: "cart.fill" as const, label: "Compras", color: "#22C55E", tab: "/shopping" },
   { id: "health", icon: "heart.fill" as const, label: "Saúde", color: "#EF4444", tab: "/health" },
-  { id: "study", icon: "book.fill" as const, label: "Estudos", color: "#8B5CF6", tab: "/study" },
 ];
 
 function ChatBubble({ msg, memberName, memberPhotoUri }: { msg: ChatMessage; memberName?: string; memberPhotoUri?: string }) {
@@ -226,13 +227,27 @@ export default function HomeScreen() {
           } catch { /* sem contexto de ciclo */ }
         }
 
+        // Obter próximos eventos do calendário para contexto
+        let calendarContext: string | undefined;
+        try {
+          const upcoming = await getUpcomingEvents(5);
+          if (upcoming.length > 0) {
+            const lines = upcoming.map((e) => {
+              const time = e.time ? ` às ${e.time}` : "";
+              const who = e.memberId ? " (membro da família)" : " (toda a família)";
+              return `- ${e.date}${time}: ${e.title}${who}${e.description ? " — " + e.description : ""}`;
+            });
+            calendarContext = `Próximos eventos da agenda familiar:\n${lines.join("\n")}`;
+          }
+        } catch { /* sem contexto de calendário */ }
+
         const result = await chatMutation.mutateAsync({
           message: text.trim(),
           memberName: activeMember?.name,
           memberId: activeMember?.id ?? "default_member",
           familyId: "alaju_family",
           memberRole: activeMember?.role,
-          context: memoryContext || undefined,
+          context: [memoryContext, calendarContext].filter(Boolean).join("\n\n") || undefined,
           gender: (activeMember?.gender === "male" || activeMember?.gender === "female") ? activeMember.gender : undefined,
           cycleContext,
         });
@@ -379,10 +394,10 @@ export default function HomeScreen() {
           </Text>
           <View style={styles.suggestions}>
             {[
+              "Quais eventos temos esta semana?",
               "Me lembre de tomar remédio às 8h",
               "Adicionar leite na lista de compras",
               "Me dê uma dica de saúde",
-              "Chamar um Uber",
             ].map((s) => (
               <Pressable
                 key={s}

@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   AssistantSettings,
+  CalendarEvent,
   ChatMessage,
   FamilyMember,
   FamilyProfile,
@@ -19,6 +20,7 @@ const KEYS = {
   STUDY: "study_sessions",
   CHAT: "chat_history",
   SETTINGS: "assistant_settings",
+  CALENDAR: "calendar_events",
 };
 
 function uuid(): string {
@@ -302,4 +304,83 @@ export async function isOnboardingDone(): Promise<boolean> {
 
 export async function markOnboardingDone(): Promise<void> {
   await AsyncStorage.setItem("onboarding_done", "true");
+}
+
+// ─── Calendar Events ──────────────────────────────────────────────────────────
+
+export async function getCalendarEvents(): Promise<CalendarEvent[]> {
+  const raw = await AsyncStorage.getItem(KEYS.CALENDAR);
+  return raw ? JSON.parse(raw) : [];
+}
+
+export async function saveCalendarEvents(events: CalendarEvent[]): Promise<void> {
+  await AsyncStorage.setItem(KEYS.CALENDAR, JSON.stringify(events));
+}
+
+export async function addCalendarEvent(
+  data: Omit<CalendarEvent, "id" | "createdAt">
+): Promise<CalendarEvent> {
+  const events = await getCalendarEvents();
+  const event: CalendarEvent = {
+    ...data,
+    id: uuid(),
+    createdAt: new Date().toISOString(),
+  };
+  events.push(event);
+  await saveCalendarEvents(events);
+  return event;
+}
+
+export async function updateCalendarEvent(
+  id: string,
+  updates: Partial<CalendarEvent>
+): Promise<void> {
+  const events = await getCalendarEvents();
+  const updated = events.map((e) =>
+    e.id === id ? { ...e, ...updates, updatedAt: new Date().toISOString() } : e
+  );
+  await saveCalendarEvents(updated);
+}
+
+export async function deleteCalendarEvent(id: string): Promise<void> {
+  const events = await getCalendarEvents();
+  await saveCalendarEvents(events.filter((e) => e.id !== id));
+}
+
+/**
+ * Retorna eventos de um determinado mês/ano.
+ */
+export async function getEventsForMonth(
+  year: number,
+  month: number // 0-indexed (0 = Janeiro)
+): Promise<CalendarEvent[]> {
+  const events = await getCalendarEvents();
+  return events.filter((e) => {
+    const d = new Date(e.date);
+    return d.getFullYear() === year && d.getMonth() === month;
+  });
+}
+
+/**
+ * Retorna eventos de uma data específica (YYYY-MM-DD).
+ */
+export async function getEventsForDate(date: string): Promise<CalendarEvent[]> {
+  const events = await getCalendarEvents();
+  return events.filter((e) => e.date === date);
+}
+
+/**
+ * Retorna próximos eventos (a partir de hoje).
+ */
+export async function getUpcomingEvents(limit = 10): Promise<CalendarEvent[]> {
+  const events = await getCalendarEvents();
+  const today = new Date().toISOString().split("T")[0];
+  return events
+    .filter((e) => e.date >= today)
+    .sort((a, b) => {
+      const dateCompare = a.date.localeCompare(b.date);
+      if (dateCompare !== 0) return dateCompare;
+      return (a.time ?? "00:00").localeCompare(b.time ?? "00:00");
+    })
+    .slice(0, limit);
 }
